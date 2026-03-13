@@ -1,0 +1,16 @@
+[package]
+name = "rok-pq"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Post-quantum cryptography module for Read-Only Keys (ML-KEM-768 hybrid)"
+
+[dependencies]
+rok-core = { path = "../rok-core" }
+ml-kem = { workspace = true }
+x25519-dalek = { workspace = true }
+rand = { workspace = true }
+rand_core = { workspace = true }
+zeroize = { workspace = true }
+thiserror = { workspace = true }

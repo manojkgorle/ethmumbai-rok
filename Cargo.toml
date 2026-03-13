@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/rok-core",
+    "crates/rok-pq",
+    "crates/rok-sdk",
+    "crates/rok-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+curve25519-dalek = { version = "4.1", features = ["serde"] }
+ed25519-dalek = { version = "2.1", features = ["rand_core", "serde"] }
+x25519-dalek = { version = "2.0", features = ["serde", "static_secrets"] }
+chacha20poly1305 = "0.10"
+aes-gcm-siv = "0.11"
+hkdf = "0.12"
+sha2 = "0.10"
+subtle = "2.6"
+ml-kem = "0.2"
+prost = "0.13"
+prost-types = "0.13"
+prost-build = "0.13"
+clap = { version = "4", features = ["derive"] }
+zeroize = { version = "1.8", features = ["derive"] }
+rand = "0.8"
+rand_core = "0.6"
+thiserror = "2"
+bs58 = "0.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+anyhow = "1"

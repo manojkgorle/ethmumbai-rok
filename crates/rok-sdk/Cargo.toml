@@ -1,0 +1,19 @@
+[package]
+name = "rok-sdk"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "High-level SDK for Read-Only Keys: vault, pipeline, identity abstractions"
+
+[dependencies]
+rok-core = { path = "../rok-core" }
+rok-pq = { path = "../rok-pq" }
+ed25519-dalek = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+rand = { workspace = true }
+rand_core = { workspace = true }
+tracing = { workspace = true }

@@ -1,0 +1,20 @@
+[package]
+name = "rok-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "CLI tool for Read-Only Keys cryptography toolkit"
+
+[[bin]]
+name = "rok"
+path = "src/main.rs"
+
+[dependencies]
+rok-core = { path = "../rok-core" }
+rok-pq = { path = "../rok-pq" }
+rok-sdk = { path = "../rok-sdk" }
+clap = { workspace = true }
+anyhow = { workspace = true }
+rand = { workspace = true }
+hex = "0.4"
