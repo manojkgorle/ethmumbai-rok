@@ -20,6 +20,7 @@ A key at `/finance` can decrypt anything at `/finance`, `/finance/q1`, `/finance
 
 - **Hierarchical read keys** — scope-based derivation with ancestor/descendant access control
 - **Multi-recipient encryption** — encrypt once, grant access to many; each recipient gets an independently wrapped data key
+- **Scope-based group encryption** — encrypt to a scope and any ancestor key holder can automatically decrypt, no recipient listing required
 - **Post-quantum hybrid** — X25519 + ML-KEM-768 combined via HKDF; secure if *either* algorithm holds
 - **Dual serialization** — compact binary format (`ROK\x01` magic header) and Protocol Buffers
 - **Authenticated envelopes** — every ciphertext is signed by the spend key (Ed25519)
@@ -153,7 +154,16 @@ rok encrypt \
   --recipient <key> \
   --output secret.pdf.rok \
   --format proto
+
+# Scope-based group encryption (no recipients needed)
+rok encrypt \
+  --file report.pdf \
+  --scope /finance/q1 \
+  --spend_seed <hex> \
+  --scope-based
 ```
+
+With `--scope-based`, a single access entry is created for the scope's derived key. Anyone holding a key at `/finance/q1`, `/finance`, or `/` can automatically decrypt—no need to list them individually.
 
 ### Decryption
 
@@ -222,8 +232,9 @@ rok inspect --file secret.pdf.rok --format proto
 Output:
 ```
 === Envelope Metadata ===
-  Version: 1
+  Version: 2
   Algorithm: EciesX25519ChaCha20
+  Access mode: per-recipient
   Scope: /finance
   Recipients: 3
   Ciphertext Size: 4.2 KB
@@ -278,6 +289,25 @@ let proto_bytes = envelope.to_proto_bytes()?;
 // Decrypt
 let plaintext = decrypt(&envelope, &finance_key, &spend.verifying_key())?;
 assert_eq!(plaintext, b"secret data");
+```
+
+### Scope-Based Group Encryption
+
+Instead of listing individual recipients, encrypt to a scope. Any ancestor key holder can derive down and decrypt automatically:
+
+```rust
+use rok_core::encrypt::{Algorithm, EncryptBuilder, decrypt};
+use rok_core::keys::scope::Scope;
+
+// Encrypt at /finance/q1 with scope-based mode — one access entry, no recipients needed
+let envelope = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, Scope::new("/finance/q1")?)
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"Q1 report", &mut rng)?;
+
+// Anyone with /finance/q1, /finance, or root key can decrypt
+let plaintext = decrypt(&envelope, &finance_key, &spend.verifying_key())?;
+let plaintext = decrypt(&envelope, &root_read, &spend.verifying_key())?;
 ```
 
 ### Key Hierarchy & Access Control
@@ -432,10 +462,13 @@ let shared_secret = hybrid_decapsulate(
 Compact binary with a magic header:
 
 ```
-ROK\x01 | version(1) | algorithm(1) | scope_len(2) | scope | ephemeral_x25519(32)
-       | mlkem_ct_len(4) | mlkem_ct | entry_count(2) | [key_id(8) | wrapped(N) | nonce(12)] ...
-       | nonce(12) | ct_len(4) | ciphertext | tag(16) | spend_pub(32) | signature(64)
+ROK\x01 | version(4) | algorithm(1) | access_mode(1) | scope_len(2) | scope
+       | ephemeral_x25519(32) | mlkem_ct_len(4) | mlkem_ct
+       | entry_count(2) | [key_id(8) | wrapped_len(2) | wrapped(N) | nonce(12)] ...
+       | nonce(12) | ct_len(8) | ciphertext | tag(16) | spend_pub(32) | signature(64)
 ```
+
+Version 1 envelopes omit `access_mode` (implicitly `Recipient`). Version 2+ includes it.
 
 ### Protocol Buffers
 
@@ -444,7 +477,7 @@ Defined in `proto/rok/`:
 | File | Messages |
 |---|---|
 | `keys.proto` | `SpendPublicKey`, `ReadPublicKey`, `ExportedReadKey`, `PqPublicKey` |
-| `envelope.proto` | `EncryptedEnvelope`, `AccessEntry`, `Algorithm` enum |
+| `envelope.proto` | `EncryptedEnvelope`, `AccessEntry`, `Algorithm` enum, `AccessMode` enum |
 | `keyring.proto` | `Keyring`, `KeyringEntry`, `EncryptedSpendKey`, `EncryptedReadKey` |
 | `access.proto` | `AccessPolicy`, `AccessRule`, `RevocationList`, `RevocationEntry` |
 
@@ -469,6 +502,7 @@ Defined in `proto/rok/`:
 3. A read key **cannot** decrypt data at any ancestor or sibling scope
 4. The root read key (scope `/`) can decrypt everything
 5. Delegated keys can derive children but never escalate to parent access
+6. In **scope-based mode**, ancestor keys auto-derive to the envelope's scope—only one access entry is needed regardless of how many key holders exist
 
 ## CI/CD
 
@@ -477,7 +511,7 @@ GitHub Actions runs on every push to `main` and on pull requests:
 | Job | Command | Purpose |
 |---|---|---|
 | **check** | `cargo check --workspace` | Compilation check |
-| **test** | `cargo test --workspace` | Run all 101 tests |
+| **test** | `cargo test --workspace` | Run all 117 tests |
 | **clippy** | `cargo clippy --workspace -- -D warnings` | Lint (warnings are errors) |
 | **fmt** | `cargo fmt --all -- --check` | Formatting check |
 | **deny** | `cargo deny check` | Supply chain audit (CVEs, licenses, sources) |
@@ -520,6 +554,14 @@ The `full_flow` test suite (`crates/rok-core/tests/full_flow.rs`) covers:
 | `test_deterministic_derivation` | Same seed produces identical key hierarchy |
 | `test_binary_serialization_preserves_all_fields` | Multi-recipient envelope round-trip integrity |
 | `test_tampered_envelope_rejected` | Signature verification catches modified ciphertext |
+| `test_scope_based_exact_scope_decrypts` | Scope-based encrypt at `/finance/q1`, decrypt with exact scope key |
+| `test_scope_based_ancestor_decrypts` | Scope-based encrypt, ancestor keys (`/finance`, `/`) auto-derive to decrypt |
+| `test_scope_based_sibling_rejected` | `/legal` key cannot decrypt scope-based `/finance/q1` envelope |
+| `test_scope_based_child_rejected` | `/finance/q1` key cannot decrypt scope-based `/finance` envelope |
+| `test_scope_based_single_access_entry` | Verifies exactly one access entry is created |
+| `test_scope_based_binary_roundtrip` | Binary serialize/deserialize + decrypt with ancestor key |
+| `test_scope_based_proto_roundtrip` | Proto serialize/deserialize + decrypt with root key |
+| `test_scope_based_tamper_rejected` | Tampered ciphertext caught by signature verification |
 
 ## Project Structure
 

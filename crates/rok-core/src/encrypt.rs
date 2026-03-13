@@ -39,6 +39,31 @@ impl Algorithm {
     }
 }
 
+/// Access mode for encrypted envelopes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum AccessMode {
+    /// Per-recipient: each recipient gets an individual access entry.
+    #[default]
+    Recipient = 0,
+    /// Scope-based: a single access entry for the scope's derived key.
+    /// Any ancestor key holder can derive down to decrypt.
+    ScopeBased = 1,
+}
+
+impl AccessMode {
+    pub fn from_u8(v: u8) -> Result<Self> {
+        match v {
+            0 => Ok(AccessMode::Recipient),
+            1 => Ok(AccessMode::ScopeBased),
+            _ => Err(RokError::SerializationError(format!(
+                "unknown access mode: {}",
+                v
+            ))),
+        }
+    }
+}
+
 /// A recipient that will receive access to encrypted data.
 #[derive(Debug, Clone)]
 pub struct Recipient {
@@ -52,6 +77,7 @@ pub struct EncryptBuilder<'a> {
     scope: Scope,
     recipients: Vec<Recipient>,
     spend_key: Option<&'a SpendKeyPair>,
+    scope_based: bool,
 }
 
 impl<'a> EncryptBuilder<'a> {
@@ -62,6 +88,7 @@ impl<'a> EncryptBuilder<'a> {
             scope,
             recipients: Vec::new(),
             spend_key: None,
+            scope_based: false,
         }
     }
 
@@ -83,6 +110,15 @@ impl<'a> EncryptBuilder<'a> {
         self
     }
 
+    /// Enable scope-based group encryption.
+    ///
+    /// Instead of listing individual recipients, a single access entry is created
+    /// for the scope's derived key. Any ancestor key holder can derive down to decrypt.
+    pub fn set_scope_based(&mut self) -> &mut Self {
+        self.scope_based = true;
+        self
+    }
+
     /// Encrypt the plaintext and produce a signed envelope.
     pub fn encrypt(
         &self,
@@ -93,8 +129,27 @@ impl<'a> EncryptBuilder<'a> {
             .spend_key
             .ok_or_else(|| RokError::EncryptionError("spend key not set".into()))?;
 
-        if self.recipients.is_empty() {
-            return Err(RokError::EncryptionError("no recipients".into()));
+        // In scope-based mode, auto-derive the scope's read key as the sole recipient
+        let recipients: Vec<Recipient>;
+        let access_mode: AccessMode;
+        if self.scope_based {
+            access_mode = AccessMode::ScopeBased;
+            let root_read = spend_key.derive_root_read_key();
+            let scope_key = if self.scope == Scope::root() {
+                root_read
+            } else {
+                root_read.derive_child(&self.scope)?
+            };
+            recipients = vec![Recipient {
+                read_public_key: *scope_key.public_key(),
+                key_id: scope_key.key_id(),
+            }];
+        } else {
+            access_mode = AccessMode::Recipient;
+            if self.recipients.is_empty() {
+                return Err(RokError::EncryptionError("no recipients".into()));
+            }
+            recipients = self.recipients.clone();
         }
 
         if self.algorithm == Algorithm::HybridX25519MlKemChaCha20 {
@@ -132,9 +187,9 @@ impl<'a> EncryptBuilder<'a> {
         tag.copy_from_slice(tag_bytes);
 
         // 4. For each recipient, wrap the data key
-        let mut access_entries = Vec::with_capacity(self.recipients.len());
+        let mut access_entries = Vec::with_capacity(recipients.len());
 
-        for recipient in &self.recipients {
+        for recipient in &recipients {
             let shared_secret = ephemeral_static.diffie_hellman(&recipient.read_public_key);
 
             // Derive wrapping key
@@ -178,6 +233,7 @@ impl<'a> EncryptBuilder<'a> {
             tag,
             signature: [0u8; 64],
             spend_public_key: *spend_key.verifying_key().as_bytes(),
+            access_mode,
         };
 
         // 6. Sign
@@ -210,26 +266,39 @@ pub fn decrypt(
         });
     }
 
-    // 3. Find matching access entry
-    let my_key_id = read_key.key_id();
+    // 3. In scope-based mode, auto-derive to the envelope's scope if needed
+    let derived: Option<ReadKeyPair>;
+    let decrypt_key: &ReadKeyPair;
+    if envelope.access_mode == AccessMode::ScopeBased && read_key.scope() != &envelope.scope {
+        derived = Some(read_key.derive_child(&envelope.scope)?);
+        decrypt_key = derived.as_ref().unwrap();
+    } else {
+        derived = None;
+        decrypt_key = read_key;
+    }
+
+    // 4. Find matching access entry
+    let my_key_id = decrypt_key.key_id();
     let entry = envelope
         .access_entries
         .iter()
         .find(|e| e.read_key_id == my_key_id)
         .ok_or_else(|| RokError::NoMatchingAccessEntry(my_key_id.to_string()))?;
 
-    // 4. ECDH: shared = X25519(read_secret, ephemeral_public)
+    // 5. ECDH: shared = X25519(read_secret, ephemeral_public)
     let ephemeral_public = X25519PublicKey::from(envelope.ephemeral_x25519_public);
-    let shared_secret = read_key.secret().diffie_hellman(&ephemeral_public);
+    let shared_secret = decrypt_key.secret().diffie_hellman(&ephemeral_public);
 
     let mut shared_bytes = [0u8; 32];
     shared_bytes.copy_from_slice(shared_secret.as_bytes());
 
-    // 5. Derive wrapping key
+    // 6. Derive wrapping key
     let wrapping_key = derive::derive_wrapping_key(&shared_bytes, &my_key_id);
     shared_bytes.zeroize();
 
-    // 6. Unwrap data key
+    drop(derived);
+
+    // 7. Unwrap data key
     let wrap_cipher = Aes256GcmSiv::new_from_slice(&wrapping_key)
         .map_err(|e| RokError::DecryptionError(format!("AES-GCM-SIV init: {}", e)))?;
 
@@ -238,7 +307,7 @@ pub fn decrypt(
         .decrypt(wrap_nonce, entry.wrapped_data_key.as_ref())
         .map_err(|_| RokError::DecryptionError("failed to unwrap data key".into()))?;
 
-    // 7. Decrypt ciphertext
+    // 8. Decrypt ciphertext
     let cipher = ChaCha20Poly1305::new_from_slice(&data_key)
         .map_err(|e| RokError::DecryptionError(format!("ChaCha20 init: {}", e)))?;
 
@@ -509,5 +578,44 @@ mod tests {
         // Finance Q1 key (exact scope) should decrypt
         let d2 = decrypt(&envelope, &finance_q1, &spend.verifying_key()).unwrap();
         assert_eq!(d2, b"Q1 report");
+    }
+
+    #[test]
+    fn test_scope_based_no_recipients_ok() {
+        let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+        let mut rng = rand::thread_rng();
+
+        // Scope-based mode with no explicit recipients should succeed
+        let envelope = EncryptBuilder::new(
+            Algorithm::EciesX25519ChaCha20,
+            Scope::new("/finance").unwrap(),
+        )
+        .set_spend_key(&spend)
+        .set_scope_based()
+        .encrypt(b"scope-based test", &mut rng)
+        .unwrap();
+
+        assert_eq!(envelope.access_mode, AccessMode::ScopeBased);
+        assert_eq!(envelope.access_entries.len(), 1);
+    }
+
+    #[test]
+    fn test_scope_based_root_scope() {
+        let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+        let root = spend.derive_root_read_key();
+        let mut rng = rand::thread_rng();
+
+        // Scope-based at root scope
+        let envelope = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, Scope::root())
+            .set_spend_key(&spend)
+            .set_scope_based()
+            .encrypt(b"root scope-based", &mut rng)
+            .unwrap();
+
+        assert_eq!(envelope.access_mode, AccessMode::ScopeBased);
+
+        // Root key can decrypt directly
+        let decrypted = decrypt(&envelope, &root, &spend.verifying_key()).unwrap();
+        assert_eq!(decrypted, b"root scope-based");
     }
 }

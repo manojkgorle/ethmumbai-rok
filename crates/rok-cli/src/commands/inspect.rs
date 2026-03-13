@@ -19,6 +19,11 @@ pub fn run(args: InspectArgs) -> anyhow::Result<()> {
     println!("=== Envelope: {} ===", args.file.display());
     println!("  Version: {}", meta.version);
     println!("  Algorithm: {:?}", meta.algorithm);
+    let mode_label = match meta.access_mode {
+        rok_core::encrypt::AccessMode::Recipient => "per-recipient",
+        rok_core::encrypt::AccessMode::ScopeBased => "scope-based",
+    };
+    println!("  Access mode: {}", mode_label);
     println!("  Scope: {}", meta.scope);
     println!("  Format: {}", format_label);
     println!("  Recipients: {}", meta.recipient_count);

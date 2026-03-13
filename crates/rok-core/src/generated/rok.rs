@@ -101,6 +101,36 @@ pub struct EncryptedEnvelope {
     /// 64 bytes (Ed25519)
     #[prost(bytes = "vec", tag = "11")]
     pub signature: ::prost::alloc::vec::Vec<u8>,
+    /// Access mode
+    #[prost(enumeration = "AccessMode", tag = "12")]
+    pub access_mode: i32,
+}
+/// / Access mode for encrypted envelopes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum AccessMode {
+    Recipient = 0,
+    ScopeBased = 1,
+}
+impl AccessMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Recipient => "ACCESS_MODE_RECIPIENT",
+            Self::ScopeBased => "ACCESS_MODE_SCOPE_BASED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ACCESS_MODE_RECIPIENT" => Some(Self::Recipient),
+            "ACCESS_MODE_SCOPE_BASED" => Some(Self::ScopeBased),
+            _ => None,
+        }
+    }
 }
 /// / Encryption algorithm.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

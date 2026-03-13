@@ -19,30 +19,37 @@ pub fn run(args: EncryptArgs) -> anyhow::Result<()> {
     let spend = SpendKeyPair::from_seed(&seed);
     let scope = Scope::new(&args.scope)?;
 
-    // Parse recipients
-    let mut recipients = Vec::new();
-    for encoded in &args.recipient {
-        let (public_key, _scope) = encoding::decode_read_public(encoded)?;
-        let key_id = KeyId::from_public_bytes(public_key.as_bytes());
-        recipients.push(Recipient {
-            read_public_key: public_key,
-            key_id,
-        });
-    }
-
-    if recipients.is_empty() {
-        anyhow::bail!("at least one --recipient is required");
-    }
-
     // Read input file
     let plaintext = fs::read(&args.file)?;
 
     // Encrypt
     let mut rng = rand::thread_rng();
-    let envelope = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, scope)
-        .add_recipients(&recipients)
-        .set_spend_key(&spend)
-        .encrypt(&plaintext, &mut rng)?;
+    let mut builder = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, scope);
+    builder.set_spend_key(&spend);
+
+    if args.scope_based {
+        builder.set_scope_based();
+    } else {
+        // Parse recipients
+        let mut recipients = Vec::new();
+        for encoded in &args.recipient {
+            let (public_key, _scope) = encoding::decode_read_public(encoded)?;
+            let key_id = KeyId::from_public_bytes(public_key.as_bytes());
+            recipients.push(Recipient {
+                read_public_key: public_key,
+                key_id,
+            });
+        }
+
+        if recipients.is_empty() {
+            anyhow::bail!(
+                "at least one --recipient is required, or use --scope-based"
+            );
+        }
+        builder.add_recipients(&recipients);
+    }
+
+    let envelope = builder.encrypt(&plaintext, &mut rng)?;
 
     // Serialize
     let envelope_bytes = match args.format {
@@ -67,12 +74,17 @@ pub fn run(args: EncryptArgs) -> anyhow::Result<()> {
         Format::Binary => "binary",
         Format::Proto => "protobuf",
     };
+    let mode_label = match envelope.access_mode {
+        rok_core::encrypt::AccessMode::Recipient => "per-recipient",
+        rok_core::encrypt::AccessMode::ScopeBased => "scope-based",
+    };
     println!(
         "Encrypted {} -> {}",
         args.file.display(),
         output_path.display()
     );
     println!("  Scope: {}", envelope.scope);
+    println!("  Access mode: {}", mode_label);
     println!("  Recipients: {}", envelope.access_entries.len());
     println!("  Format: {}", format_label);
     println!("  Size: {} bytes", envelope_bytes.len());

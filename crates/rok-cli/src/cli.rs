@@ -86,6 +86,10 @@ pub struct EncryptArgs {
     /// Wire format for the encrypted envelope
     #[arg(long, value_enum, default_value_t = Format::Binary)]
     pub format: Format,
+
+    /// Use scope-based group encryption (any ancestor key can decrypt)
+    #[arg(long, default_value_t = false)]
+    pub scope_based: bool,
 }
 
 #[derive(clap::Args)]

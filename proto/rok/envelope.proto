@@ -2,6 +2,12 @@ syntax = "proto3";
 
 package rok;
 
+/// Access mode for encrypted envelopes.
+enum AccessMode {
+  ACCESS_MODE_RECIPIENT = 0;
+  ACCESS_MODE_SCOPE_BASED = 1;
+}
+
 /// Encryption algorithm.
 enum Algorithm {
   ALGORITHM_UNSPECIFIED = 0;
@@ -37,4 +43,7 @@ message EncryptedEnvelope {
   // Authenticity
   bytes spend_public_key = 10;  // 32 bytes
   bytes signature = 11;         // 64 bytes (Ed25519)
+
+  // Access mode
+  AccessMode access_mode = 12;
 }

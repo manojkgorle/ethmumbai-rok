@@ -1,4 +1,4 @@
-use crate::encrypt::Algorithm;
+use crate::encrypt::{AccessMode, Algorithm};
 use crate::error::{Result, RokError};
 use crate::keys::key_id::KeyId;
 use crate::keys::scope::Scope;
@@ -28,6 +28,7 @@ pub struct EncryptedEnvelope {
     pub tag: [u8; 16],
     pub signature: [u8; 64],
     pub spend_public_key: [u8; 32],
+    pub access_mode: AccessMode,
 }
 
 /// Non-secret metadata about an envelope (for inspection without decryption).
@@ -39,6 +40,7 @@ pub struct EnvelopeMetadata {
     pub recipient_count: usize,
     pub ciphertext_len: usize,
     pub recipient_key_ids: Vec<KeyId>,
+    pub access_mode: AccessMode,
 }
 
 impl EncryptedEnvelope {
@@ -46,7 +48,7 @@ impl EncryptedEnvelope {
     pub const FILE_EXTENSION: &'static str = "rok";
 
     /// Current envelope version.
-    pub const CURRENT_VERSION: u32 = 1;
+    pub const CURRENT_VERSION: u32 = 2;
 
     /// Compute the bytes that are signed (everything except the signature field).
     pub fn signable_bytes(&self) -> Vec<u8> {
@@ -54,6 +56,7 @@ impl EncryptedEnvelope {
 
         buf.extend_from_slice(&self.version.to_le_bytes());
         buf.push(self.algorithm as u8);
+        buf.push(self.access_mode as u8);
         buf.extend_from_slice(self.scope.as_str().as_bytes());
         buf.extend_from_slice(&self.ephemeral_x25519_public);
 
@@ -90,6 +93,7 @@ impl EncryptedEnvelope {
             recipient_count: self.access_entries.len(),
             ciphertext_len: self.ciphertext.len(),
             recipient_key_ids: self.access_entries.iter().map(|e| e.read_key_id).collect(),
+            access_mode: self.access_mode,
         }
     }
 
@@ -108,6 +112,9 @@ impl EncryptedEnvelope {
 
         // Algorithm
         buf.push(self.algorithm as u8);
+
+        // Access mode
+        buf.push(self.access_mode as u8);
 
         // Scope (length-prefixed)
         let scope_bytes = self.scope.as_str().as_bytes();
@@ -182,6 +189,14 @@ impl EncryptedEnvelope {
         let algo_byte = read_bytes(&mut pos, 1)?[0];
         let algorithm = Algorithm::from_u8(algo_byte)?;
 
+        // Access mode (v2+); v1 envelopes default to Recipient
+        let access_mode = if version >= 2 {
+            let mode_byte = read_bytes(&mut pos, 1)?[0];
+            AccessMode::from_u8(mode_byte)?
+        } else {
+            AccessMode::Recipient
+        };
+
         // Scope
         let scope_len = u16::from_le_bytes(read_bytes(&mut pos, 2)?.try_into().unwrap()) as usize;
         let scope_bytes = read_bytes(&mut pos, scope_len)?;
@@ -254,6 +269,7 @@ impl EncryptedEnvelope {
             tag,
             signature,
             spend_public_key,
+            access_mode,
         })
     }
 }
@@ -264,7 +280,7 @@ mod tests {
 
     fn make_test_envelope() -> EncryptedEnvelope {
         EncryptedEnvelope {
-            version: 1,
+            version: 2,
             algorithm: Algorithm::EciesX25519ChaCha20,
             scope: Scope::new("/test").unwrap(),
             ephemeral_x25519_public: [1u8; 32],
@@ -279,6 +295,7 @@ mod tests {
             tag: [12u8; 16],
             signature: [13u8; 64],
             spend_public_key: [14u8; 32],
+            access_mode: AccessMode::Recipient,
         }
     }
 
@@ -313,7 +330,7 @@ mod tests {
     fn test_metadata() {
         let envelope = make_test_envelope();
         let meta = envelope.metadata();
-        assert_eq!(meta.version, 1);
+        assert_eq!(meta.version, 2);
         assert_eq!(meta.recipient_count, 1);
         assert_eq!(meta.ciphertext_len, 64);
     }

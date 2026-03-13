@@ -4,7 +4,7 @@
 //! multi-level delegation, and access control enforcement.
 
 use rok_core::encoding;
-use rok_core::encrypt::{decrypt, Algorithm, EncryptBuilder, Recipient};
+use rok_core::encrypt::{decrypt, AccessMode, Algorithm, EncryptBuilder, Recipient};
 use rok_core::envelope::EncryptedEnvelope;
 use rok_core::keys::read::ReadKeyPair;
 use rok_core::keys::scope::Scope;
@@ -368,4 +368,210 @@ fn test_tampered_envelope_rejected() {
         assert!(result.is_err(), "tampered envelope should fail decryption");
     }
     // If from_bytes fails, that's also acceptable — corruption detected early
+}
+
+// ==================== Scope-Based Group Encryption Tests ====================
+
+/// Encrypt at /finance/q1 scope-based, decrypt with the exact scope key
+#[test]
+fn test_scope_based_exact_scope_decrypts() {
+    let mut rng = rand::thread_rng();
+    let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+    let root = spend.derive_root_read_key();
+    let finance_q1 = root
+        .derive_child(&Scope::new("/finance/q1").unwrap())
+        .unwrap();
+
+    let envelope = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/finance/q1").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"Q1 scope-based secret", &mut rng)
+    .unwrap();
+
+    assert_eq!(envelope.access_mode, AccessMode::ScopeBased);
+
+    let decrypted = decrypt(&envelope, &finance_q1, &spend.verifying_key()).unwrap();
+    assert_eq!(decrypted, b"Q1 scope-based secret");
+}
+
+/// Encrypt at /finance/q1, decrypt with ancestor keys (/finance and root)
+#[test]
+fn test_scope_based_ancestor_decrypts() {
+    let mut rng = rand::thread_rng();
+    let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+    let root = spend.derive_root_read_key();
+    let finance = root.derive_child_segment("finance").unwrap();
+    let vk = spend.verifying_key();
+
+    let envelope = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/finance/q1").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"ancestor access test", &mut rng)
+    .unwrap();
+
+    // /finance (parent) can decrypt by auto-deriving to /finance/q1
+    assert_eq!(
+        decrypt(&envelope, &finance, &vk).unwrap(),
+        b"ancestor access test"
+    );
+
+    // Root (grandparent) can decrypt by auto-deriving to /finance/q1
+    assert_eq!(
+        decrypt(&envelope, &root, &vk).unwrap(),
+        b"ancestor access test"
+    );
+}
+
+/// Encrypt at /finance/q1 scope-based, /legal key fails with ScopeMismatch
+#[test]
+fn test_scope_based_sibling_rejected() {
+    let mut rng = rand::thread_rng();
+    let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+    let root = spend.derive_root_read_key();
+    let legal = root.derive_child_segment("legal").unwrap();
+
+    let envelope = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/finance/q1").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"finance only", &mut rng)
+    .unwrap();
+
+    let err = decrypt(&envelope, &legal, &spend.verifying_key()).unwrap_err();
+    assert!(
+        err.to_string().contains("scope mismatch"),
+        "expected scope mismatch, got: {}",
+        err
+    );
+}
+
+/// Encrypt at /finance scope-based, /finance/q1 key fails (child can't access parent)
+#[test]
+fn test_scope_based_child_rejected() {
+    let mut rng = rand::thread_rng();
+    let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+    let root = spend.derive_root_read_key();
+    let finance_q1 = root
+        .derive_child(&Scope::new("/finance/q1").unwrap())
+        .unwrap();
+
+    let envelope = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/finance").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"finance parent only", &mut rng)
+    .unwrap();
+
+    let err = decrypt(&envelope, &finance_q1, &spend.verifying_key()).unwrap_err();
+    assert!(
+        err.to_string().contains("scope mismatch"),
+        "expected scope mismatch, got: {}",
+        err
+    );
+}
+
+/// Verify that scope-based encryption creates exactly one access entry
+#[test]
+fn test_scope_based_single_access_entry() {
+    let mut rng = rand::thread_rng();
+    let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+
+    let envelope = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/finance/q1").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"single entry", &mut rng)
+    .unwrap();
+
+    assert_eq!(envelope.access_entries.len(), 1);
+    assert_eq!(envelope.access_mode, AccessMode::ScopeBased);
+}
+
+/// Binary serialize/deserialize roundtrip with scope-based mode, then decrypt
+#[test]
+fn test_scope_based_binary_roundtrip() {
+    let mut rng = rand::thread_rng();
+    let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+    let root = spend.derive_root_read_key();
+    let finance = root.derive_child_segment("finance").unwrap();
+
+    let envelope = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/finance/q1").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"binary roundtrip", &mut rng)
+    .unwrap();
+
+    let bytes = envelope.to_bytes();
+    let restored = EncryptedEnvelope::from_bytes(&bytes).unwrap();
+
+    assert_eq!(restored.access_mode, AccessMode::ScopeBased);
+    assert_eq!(restored.version, 2);
+
+    // Ancestor can still decrypt after roundtrip
+    let decrypted = decrypt(&restored, &finance, &spend.verifying_key()).unwrap();
+    assert_eq!(decrypted, b"binary roundtrip");
+}
+
+/// Proto serialize/deserialize roundtrip with scope-based mode, then decrypt
+#[test]
+fn test_scope_based_proto_roundtrip() {
+    let mut rng = rand::thread_rng();
+    let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+    let root = spend.derive_root_read_key();
+
+    let envelope = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/finance/q1").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"proto roundtrip", &mut rng)
+    .unwrap();
+
+    let proto_bytes = envelope.to_proto_bytes();
+    let restored = EncryptedEnvelope::from_proto_bytes(&proto_bytes).unwrap();
+
+    assert_eq!(restored.access_mode, AccessMode::ScopeBased);
+
+    // Root can decrypt after proto roundtrip
+    let decrypted = decrypt(&restored, &root, &spend.verifying_key()).unwrap();
+    assert_eq!(decrypted, b"proto roundtrip");
+}
+
+/// Tampering with ciphertext in scope-based envelope is caught by signature
+#[test]
+fn test_scope_based_tamper_rejected() {
+    let mut rng = rand::thread_rng();
+    let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+    let root = spend.derive_root_read_key();
+
+    let mut envelope = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/finance/q1").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"tamper test", &mut rng)
+    .unwrap();
+
+    // Tamper with ciphertext
+    envelope.ciphertext[0] ^= 0xff;
+
+    let result = decrypt(&envelope, &root, &spend.verifying_key());
+    assert!(result.is_err(), "tampered scope-based envelope should fail");
 }

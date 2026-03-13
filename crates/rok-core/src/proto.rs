@@ -13,7 +13,7 @@ use ed25519_dalek::VerifyingKey;
 use prost::Message;
 use x25519_dalek::PublicKey as X25519PublicKey;
 
-use crate::encrypt::Algorithm as NativeAlgorithm;
+use crate::encrypt::{AccessMode as NativeAccessMode, Algorithm as NativeAlgorithm};
 use crate::envelope::{AccessEntry as NativeAccessEntry, EncryptedEnvelope as NativeEnvelope};
 use crate::error::{Result, RokError};
 use crate::keys::key_id::KeyId;
@@ -43,6 +43,28 @@ impl TryFrom<rok::Algorithm> for NativeAlgorithm {
             rok::Algorithm::Unspecified => {
                 Err(RokError::SerializationError("unspecified algorithm".into()))
             }
+        }
+    }
+}
+
+// --- AccessMode conversions ---
+
+impl From<NativeAccessMode> for rok::AccessMode {
+    fn from(mode: NativeAccessMode) -> Self {
+        match mode {
+            NativeAccessMode::Recipient => rok::AccessMode::Recipient,
+            NativeAccessMode::ScopeBased => rok::AccessMode::ScopeBased,
+        }
+    }
+}
+
+impl TryFrom<rok::AccessMode> for NativeAccessMode {
+    type Error = RokError;
+
+    fn try_from(mode: rok::AccessMode) -> Result<Self> {
+        match mode {
+            rok::AccessMode::Recipient => Ok(NativeAccessMode::Recipient),
+            rok::AccessMode::ScopeBased => Ok(NativeAccessMode::ScopeBased),
         }
     }
 }
@@ -219,6 +241,7 @@ impl From<&NativeEnvelope> for rok::EncryptedEnvelope {
             tag: env.tag.to_vec(),
             spend_public_key: env.spend_public_key.to_vec(),
             signature: env.signature.to_vec(),
+            access_mode: rok::AccessMode::from(env.access_mode) as i32,
         }
     }
 }
@@ -283,6 +306,15 @@ impl TryFrom<&rok::EncryptedEnvelope> for NativeEnvelope {
         let mut signature = [0u8; 64];
         signature.copy_from_slice(&env.signature);
 
+        let access_mode = NativeAccessMode::try_from(
+            rok::AccessMode::try_from(env.access_mode).map_err(|_| {
+                RokError::SerializationError(format!(
+                    "unknown access mode value: {}",
+                    env.access_mode
+                ))
+            })?,
+        )?;
+
         Ok(NativeEnvelope {
             version: env.version,
             algorithm,
@@ -295,6 +327,7 @@ impl TryFrom<&rok::EncryptedEnvelope> for NativeEnvelope {
             tag,
             spend_public_key,
             signature,
+            access_mode,
         })
     }
 }
@@ -352,7 +385,7 @@ mod tests {
 
     fn make_test_envelope() -> NativeEnvelope {
         NativeEnvelope {
-            version: 1,
+            version: 2,
             algorithm: Algorithm::EciesX25519ChaCha20,
             scope: Scope::new("/test").unwrap(),
             ephemeral_x25519_public: [1u8; 32],
@@ -367,6 +400,7 @@ mod tests {
             tag: [12u8; 16],
             signature: [13u8; 64],
             spend_public_key: [14u8; 32],
+            access_mode: NativeAccessMode::Recipient,
         }
     }
 
