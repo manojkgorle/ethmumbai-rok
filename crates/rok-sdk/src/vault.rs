@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use rok_core::encrypt::{Algorithm, EncryptBuilder, Recipient, decrypt};
+use rok_core::encrypt::{decrypt, Algorithm, EncryptBuilder, Recipient};
 use rok_core::envelope::EncryptedEnvelope;
-use rok_core::error::{RokError, Result};
+use rok_core::error::{Result, RokError};
 use rok_core::keys::read::ReadKeyPair;
 use rok_core::keys::scope::Scope;
 use rok_core::keys::spend::SpendKeyPair;
@@ -112,13 +112,11 @@ impl Vault {
             let envelope = self.documents.get(&name).unwrap();
             let plaintext = decrypt(envelope, root_read_key, &vk)?;
 
-            let new_envelope = EncryptBuilder::new(
-                Algorithm::EciesX25519ChaCha20,
-                envelope.scope.clone(),
-            )
-            .add_recipients(new_recipients)
-            .set_spend_key(&self.spend_key)
-            .encrypt(&plaintext, &mut rng)?;
+            let new_envelope =
+                EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, envelope.scope.clone())
+                    .add_recipients(new_recipients)
+                    .set_spend_key(&self.spend_key)
+                    .encrypt(&plaintext, &mut rng)?;
 
             self.documents.insert(name, new_envelope);
         }
@@ -156,7 +154,7 @@ mod tests {
 
     #[test]
     fn test_store_and_retrieve() {
-        let (spend, root, finance, _) = setup();
+        let (_spend, _root, finance, _) = setup();
         let mut vault = Vault::new(SpendKeyPair::from_seed(&[42u8; 32]));
 
         let recipients = vec![Recipient {
@@ -165,7 +163,12 @@ mod tests {
         }];
 
         vault
-            .store("report.pdf", &Scope::new("/finance").unwrap(), b"secret data", &recipients)
+            .store(
+                "report.pdf",
+                &Scope::new("/finance").unwrap(),
+                b"secret data",
+                &recipients,
+            )
             .unwrap();
 
         let data = vault.retrieve("report.pdf", &finance).unwrap();
@@ -174,7 +177,7 @@ mod tests {
 
     #[test]
     fn test_wrong_scope_key_fails() {
-        let (spend, _, finance, legal) = setup();
+        let (_spend, _, finance, legal) = setup();
         let mut vault = Vault::new(SpendKeyPair::from_seed(&[42u8; 32]));
 
         let recipients = vec![Recipient {
@@ -183,7 +186,12 @@ mod tests {
         }];
 
         vault
-            .store("report.pdf", &Scope::new("/finance").unwrap(), b"secret", &recipients)
+            .store(
+                "report.pdf",
+                &Scope::new("/finance").unwrap(),
+                b"secret",
+                &recipients,
+            )
             .unwrap();
 
         // Legal key should not be able to decrypt finance document
@@ -192,7 +200,7 @@ mod tests {
 
     #[test]
     fn test_list_documents() {
-        let (spend, root, finance, legal) = setup();
+        let (_spend, _root, finance, legal) = setup();
         let mut vault = Vault::new(SpendKeyPair::from_seed(&[42u8; 32]));
 
         let fin_recipients = vec![Recipient {
@@ -205,10 +213,20 @@ mod tests {
         }];
 
         vault
-            .store("fin.pdf", &Scope::new("/finance").unwrap(), b"data1", &fin_recipients)
+            .store(
+                "fin.pdf",
+                &Scope::new("/finance").unwrap(),
+                b"data1",
+                &fin_recipients,
+            )
             .unwrap();
         vault
-            .store("contract.pdf", &Scope::new("/legal").unwrap(), b"data2", &legal_recipients)
+            .store(
+                "contract.pdf",
+                &Scope::new("/legal").unwrap(),
+                b"data2",
+                &legal_recipients,
+            )
             .unwrap();
 
         // All documents
@@ -239,7 +257,12 @@ mod tests {
         ];
 
         vault
-            .store("report.pdf", &Scope::new("/finance").unwrap(), b"secret data", &recipients)
+            .store(
+                "report.pdf",
+                &Scope::new("/finance").unwrap(),
+                b"secret data",
+                &recipients,
+            )
             .unwrap();
 
         // Rekey: remove finance, add legal

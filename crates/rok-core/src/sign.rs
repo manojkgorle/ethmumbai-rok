@@ -1,6 +1,6 @@
 use ed25519_dalek::{Signature, Signer, Verifier, VerifyingKey};
 
-use crate::error::{RokError, Result};
+use crate::error::{Result, RokError};
 use crate::keys::spend::SpendKeyPair;
 
 /// Sign arbitrary data with a spend key (Ed25519).
@@ -10,13 +10,8 @@ pub fn sign(spend_key: &SpendKeyPair, data: &[u8]) -> [u8; 64] {
 }
 
 /// Verify a signature against a spend public key.
-pub fn verify(
-    verifying_key: &VerifyingKey,
-    data: &[u8],
-    signature_bytes: &[u8; 64],
-) -> Result<()> {
-    let signature =
-        Signature::from_bytes(signature_bytes);
+pub fn verify(verifying_key: &VerifyingKey, data: &[u8], signature_bytes: &[u8; 64]) -> Result<()> {
+    let signature = Signature::from_bytes(signature_bytes);
     verifying_key
         .verify(data, &signature)
         .map_err(|_| RokError::SignatureVerificationFailed)

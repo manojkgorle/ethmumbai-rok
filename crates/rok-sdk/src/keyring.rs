@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use rok_core::error::{RokError, Result};
+use rok_core::error::{Result, RokError};
+use rok_core::keyring::{KeyStore, ReadKeyInfo};
 use rok_core::keys::key_id::KeyId;
 use rok_core::keys::read::ReadKeyPair;
 use rok_core::keys::spend::SpendKeyPair;
-use rok_core::keyring::{KeyStore, ReadKeyInfo};
 
 /// In-memory keyring for key management.
 ///
@@ -43,10 +43,8 @@ impl Default for MemoryKeyring {
 
 impl KeyStore for MemoryKeyring {
     fn store_spend_key(&mut self, label: &str, key: &SpendKeyPair) -> Result<()> {
-        self.spend_keys.insert(
-            label.to_string(),
-            SpendKeySeed { seed: key.seed() },
-        );
+        self.spend_keys
+            .insert(label.to_string(), SpendKeySeed { seed: key.seed() });
         Ok(())
     }
 
@@ -72,7 +70,8 @@ impl KeyStore for MemoryKeyring {
             revoked: false,
             label: None,
         };
-        self.read_keys.insert(*key_id.as_bytes(), ReadKeyEntry { exported, info });
+        self.read_keys
+            .insert(*key_id.as_bytes(), ReadKeyEntry { exported, info });
         Ok(())
     }
 

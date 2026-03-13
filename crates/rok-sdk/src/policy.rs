@@ -100,6 +100,75 @@ impl AccessPolicy {
     pub fn rules(&self) -> &[AccessRule] {
         &self.rules
     }
+
+    /// Serialize the policy to protobuf bytes.
+    pub fn to_proto_bytes(&self) -> Vec<u8> {
+        let proto = self.to_proto();
+        proto.to_proto_bytes()
+    }
+
+    /// Deserialize from protobuf bytes.
+    pub fn from_proto_bytes(bytes: &[u8]) -> std::result::Result<Self, rok_core::error::RokError> {
+        let proto = rok_core::proto::rok::AccessPolicy::from_proto_bytes(bytes)?;
+        Self::from_proto(&proto)
+    }
+
+    fn to_proto(&self) -> rok_core::proto::rok::AccessPolicy {
+        rok_core::proto::rok::AccessPolicy {
+            rules: self
+                .rules
+                .iter()
+                .map(|r| rok_core::proto::rok::AccessRule {
+                    scope: r.scope.clone(),
+                    recipient_key_ids: r
+                        .recipient_key_ids
+                        .iter()
+                        .map(|kid_b58| {
+                            KeyId::from_base58(kid_b58)
+                                .map(|kid| kid.as_bytes().to_vec())
+                                .unwrap_or_default()
+                        })
+                        .collect(),
+                    expires_at: r.expires_at.unwrap_or(0),
+                })
+                .collect(),
+        }
+    }
+
+    fn from_proto(
+        proto: &rok_core::proto::rok::AccessPolicy,
+    ) -> std::result::Result<Self, rok_core::error::RokError> {
+        let rules = proto
+            .rules
+            .iter()
+            .map(|r| {
+                let recipient_key_ids = r
+                    .recipient_key_ids
+                    .iter()
+                    .map(|bytes| {
+                        if bytes.len() == 8 {
+                            let mut arr = [0u8; 8];
+                            arr.copy_from_slice(bytes);
+                            KeyId::from_bytes(arr).to_base58()
+                        } else {
+                            String::new()
+                        }
+                    })
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                AccessRule {
+                    scope: r.scope.clone(),
+                    recipient_key_ids,
+                    expires_at: if r.expires_at == 0 {
+                        None
+                    } else {
+                        Some(r.expires_at)
+                    },
+                }
+            })
+            .collect();
+        Ok(AccessPolicy { rules })
+    }
 }
 
 impl Default for AccessPolicy {
@@ -111,8 +180,6 @@ impl Default for AccessPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rok_core::keys::spend::SpendKeyPair;
-
     #[test]
     fn test_grant_and_lookup() {
         let mut policy = AccessPolicy::new();
@@ -163,6 +230,23 @@ mod tests {
 
         let json = policy.to_json().unwrap();
         let restored = AccessPolicy::from_json(&json).unwrap();
+
+        assert_eq!(restored.rules().len(), 1);
+        assert_eq!(
+            restored.key_ids_for_scope(&scope),
+            policy.key_ids_for_scope(&scope)
+        );
+    }
+
+    #[test]
+    fn test_proto_roundtrip() {
+        let mut policy = AccessPolicy::new();
+        let scope = Scope::new("/finance").unwrap();
+        let kid = KeyId::from_bytes([1, 2, 3, 4, 5, 6, 7, 8]);
+        policy.grant(&scope, &kid, None);
+
+        let bytes = policy.to_proto_bytes();
+        let restored = AccessPolicy::from_proto_bytes(&bytes).unwrap();
 
         assert_eq!(restored.rules().len(), 1);
         assert_eq!(

@@ -1,4 +1,4 @@
-use crate::error::{RokError, Result};
+use crate::error::{Result, RokError};
 use serde::{Deserialize, Serialize};
 
 /// A validated hierarchical scope path.
@@ -27,9 +27,7 @@ impl Scope {
             return Err(RokError::InvalidScope("scope cannot be empty".into()));
         }
         if !path.starts_with('/') {
-            return Err(RokError::InvalidScope(
-                "scope must start with '/'".into(),
-            ));
+            return Err(RokError::InvalidScope("scope must start with '/'".into()));
         }
         if path.len() > 1 && path.ends_with('/') {
             return Err(RokError::InvalidScope(
@@ -81,7 +79,8 @@ impl Scope {
             return true;
         }
         // Check that descendant starts with self + "/"
-        descendant.0.starts_with(&self.0) && descendant.0.as_bytes().get(self.0.len()) == Some(&b'/')
+        descendant.0.starts_with(&self.0)
+            && descendant.0.as_bytes().get(self.0.len()) == Some(&b'/')
     }
 
     /// Return the depth of the scope (number of path segments).
@@ -236,7 +235,10 @@ mod tests {
     #[test]
     fn test_components() {
         assert_eq!(Scope::root().components(), Vec::<&str>::new());
-        assert_eq!(Scope::new("/finance").unwrap().components(), vec!["finance"]);
+        assert_eq!(
+            Scope::new("/finance").unwrap().components(),
+            vec!["finance"]
+        );
         assert_eq!(
             Scope::new("/finance/q1").unwrap().components(),
             vec!["finance", "q1"]

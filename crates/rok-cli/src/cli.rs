@@ -1,5 +1,15 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
+
+/// Wire format for encrypted envelopes.
+#[derive(Debug, Clone, Copy, Default, ValueEnum)]
+pub enum Format {
+    /// Custom binary format (ROK\x01 magic header)
+    #[default]
+    Binary,
+    /// Protocol Buffers
+    Proto,
+}
 
 #[derive(Parser)]
 #[command(name = "rok", about = "Read-Only Keys cryptography toolkit")]
@@ -25,8 +35,12 @@ pub enum Command {
     Verify(VerifyArgs),
     /// Export a derived read key for delegation
     Grant(GrantArgs),
+    /// Mark a key as revoked in the keyring
+    Revoke(RevokeArgs),
     /// Inspect an encrypted envelope's metadata
     Inspect(InspectArgs),
+    /// Keyring management: list, export, import, delete
+    Keyring(KeyringArgs),
 }
 
 #[derive(clap::Args)]
@@ -68,6 +82,10 @@ pub struct EncryptArgs {
     /// Output file (defaults to <file>.rok)
     #[arg(long)]
     pub output: Option<PathBuf>,
+
+    /// Wire format for the encrypted envelope
+    #[arg(long, value_enum, default_value_t = Format::Binary)]
+    pub format: Format,
 }
 
 #[derive(clap::Args)]
@@ -87,6 +105,10 @@ pub struct DecryptArgs {
     /// Output file (defaults to stripping .rok extension)
     #[arg(long)]
     pub output: Option<PathBuf>,
+
+    /// Wire format of the input envelope
+    #[arg(long, value_enum, default_value_t = Format::Binary)]
+    pub format: Format,
 }
 
 #[derive(clap::Args)]
@@ -131,8 +153,93 @@ pub struct GrantArgs {
 }
 
 #[derive(clap::Args)]
+pub struct RevokeArgs {
+    /// Key ID to revoke (base58-encoded)
+    #[arg(long)]
+    pub key_id: String,
+
+    /// Spend key seed (hex-encoded 32 bytes)
+    #[arg(long)]
+    pub spend_seed: String,
+
+    /// Scope of the key to revoke (for derivation)
+    #[arg(long)]
+    pub scope: Option<String>,
+}
+
+#[derive(clap::Args)]
 pub struct InspectArgs {
     /// Encrypted file to inspect (.rok file)
     #[arg(long)]
     pub file: PathBuf,
+
+    /// Wire format of the input envelope
+    #[arg(long, value_enum, default_value_t = Format::Binary)]
+    pub format: Format,
+}
+
+#[derive(clap::Args)]
+pub struct KeyringArgs {
+    #[command(subcommand)]
+    pub action: KeyringAction,
+}
+
+#[derive(Subcommand)]
+pub enum KeyringAction {
+    /// List all keys in the keyring
+    List(KeyringListArgs),
+    /// Export a read key for delegation
+    Export(KeyringExportArgs),
+    /// Import a read key from an exported string
+    Import(KeyringImportArgs),
+    /// Delete a key from the keyring
+    Delete(KeyringDeleteArgs),
+}
+
+#[derive(clap::Args)]
+pub struct KeyringListArgs {
+    /// Spend key seed (hex-encoded 32 bytes)
+    #[arg(long)]
+    pub spend_seed: String,
+
+    /// Scopes to derive and include (can specify multiple)
+    #[arg(long)]
+    pub scopes: Vec<String>,
+}
+
+#[derive(clap::Args)]
+pub struct KeyringExportArgs {
+    /// Key ID to export (base58-encoded)
+    #[arg(long)]
+    pub key_id: String,
+
+    /// Spend key seed (hex-encoded 32 bytes)
+    #[arg(long)]
+    pub spend_seed: String,
+
+    /// Scope of the key (for derivation)
+    #[arg(long)]
+    pub scope: Option<String>,
+}
+
+#[derive(clap::Args)]
+pub struct KeyringImportArgs {
+    /// Exported read key (base58-encoded)
+    #[arg(long)]
+    pub exported_key: String,
+}
+
+#[derive(clap::Args)]
+pub struct KeyringDeleteArgs {
+    /// Key ID to delete (base58-encoded)
+    #[arg(long)]
+    pub key_id: String,
+
+    /// Spend key seed (hex-encoded, needed to populate keyring)
+    #[arg(long)]
+    pub spend_seed: Option<String>,
+
+    /// Scope of the key (for derivation)
+    #[arg(long)]
+    pub scope: Option<String>,
 }

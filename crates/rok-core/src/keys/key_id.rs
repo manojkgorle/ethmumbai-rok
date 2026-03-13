@@ -1,5 +1,5 @@
-use sha2::{Sha256, Digest};
-use crate::error::{RokError, Result};
+use crate::error::{Result, RokError};
+use sha2::{Digest, Sha256};
 
 /// A key identifier: the first 8 bytes of SHA-256(public_key_bytes).
 ///

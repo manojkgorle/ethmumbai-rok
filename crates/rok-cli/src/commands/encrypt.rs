@@ -6,7 +6,7 @@ use rok_core::keys::key_id::KeyId;
 use rok_core::keys::scope::Scope;
 use rok_core::keys::spend::SpendKeyPair;
 
-use crate::cli::EncryptArgs;
+use crate::cli::{EncryptArgs, Format};
 
 pub fn run(args: EncryptArgs) -> anyhow::Result<()> {
     let seed_bytes = hex::decode(&args.spend_seed)?;
@@ -44,6 +44,12 @@ pub fn run(args: EncryptArgs) -> anyhow::Result<()> {
         .set_spend_key(&spend)
         .encrypt(&plaintext, &mut rng)?;
 
+    // Serialize
+    let envelope_bytes = match args.format {
+        Format::Binary => envelope.to_bytes(),
+        Format::Proto => envelope.to_proto_bytes(),
+    };
+
     // Write output
     let output_path = args.output.unwrap_or_else(|| {
         let mut p = args.file.clone();
@@ -55,12 +61,20 @@ pub fn run(args: EncryptArgs) -> anyhow::Result<()> {
         p
     });
 
-    let envelope_bytes = envelope.to_bytes();
     fs::write(&output_path, &envelope_bytes)?;
 
-    println!("Encrypted {} -> {}", args.file.display(), output_path.display());
+    let format_label = match args.format {
+        Format::Binary => "binary",
+        Format::Proto => "protobuf",
+    };
+    println!(
+        "Encrypted {} -> {}",
+        args.file.display(),
+        output_path.display()
+    );
     println!("  Scope: {}", envelope.scope);
     println!("  Recipients: {}", envelope.access_entries.len());
+    println!("  Format: {}", format_label);
     println!("  Size: {} bytes", envelope_bytes.len());
 
     Ok(())

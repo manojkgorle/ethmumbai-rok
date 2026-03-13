@@ -56,17 +56,16 @@ pub fn decapsulate(
     ciphertext: &[u8],
 ) -> Result<Vec<u8>, rok_core::error::RokError> {
     // Reconstruct the ciphertext Array from the byte slice
-    let ct: ml_kem::Ciphertext<MlKem768> = ciphertext
-        .try_into()
-        .map_err(|_| rok_core::error::RokError::DecryptionError(
-            format!("invalid ML-KEM ciphertext length: {}", ciphertext.len()),
-        ))?;
+    let ct: ml_kem::Ciphertext<MlKem768> = ciphertext.try_into().map_err(|_| {
+        rok_core::error::RokError::DecryptionError(format!(
+            "invalid ML-KEM ciphertext length: {}",
+            ciphertext.len()
+        ))
+    })?;
 
-    let ss = dk
-        .decapsulate(&ct)
-        .map_err(|_| {
-            rok_core::error::RokError::DecryptionError("ML-KEM decapsulation failed".into())
-        })?;
+    let ss = dk.decapsulate(&ct).map_err(|_| {
+        rok_core::error::RokError::DecryptionError("ML-KEM decapsulation failed".into())
+    })?;
 
     Ok(ss.as_slice().to_vec())
 }

@@ -17,4 +17,6 @@ rok-sdk = { path = "../rok-sdk" }
 clap = { workspace = true }
 anyhow = { workspace = true }
 rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 hex = "0.4"

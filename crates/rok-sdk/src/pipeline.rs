@@ -1,4 +1,4 @@
-use rok_core::encrypt::{Algorithm, EncryptBuilder, Recipient, decrypt};
+use rok_core::encrypt::{decrypt, Algorithm, EncryptBuilder, Recipient};
 use rok_core::envelope::EncryptedEnvelope;
 use rok_core::error::Result;
 use rok_core::keys::key_id::KeyId;
@@ -94,10 +94,7 @@ mod tests {
         let vk = spend.verifying_key();
         let root = spend.derive_root_read_key();
 
-        let mut pipeline = Pipeline::new(
-            Scope::root(),
-            SpendKeyPair::from_seed(&[42u8; 32]),
-        );
+        let mut pipeline = Pipeline::new(Scope::root(), SpendKeyPair::from_seed(&[42u8; 32]));
 
         pipeline.add_consumer(Recipient {
             read_public_key: *root.public_key(),
@@ -119,10 +116,7 @@ mod tests {
         let c1 = root.derive_child_segment("c1").unwrap();
         let c2 = root.derive_child_segment("c2").unwrap();
 
-        let mut pipeline = Pipeline::new(
-            Scope::root(),
-            SpendKeyPair::from_seed(&[42u8; 32]),
-        );
+        let mut pipeline = Pipeline::new(Scope::root(), SpendKeyPair::from_seed(&[42u8; 32]));
 
         pipeline.add_consumer(Recipient {
             read_public_key: *c1.public_key(),

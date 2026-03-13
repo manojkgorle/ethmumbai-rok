@@ -1,6 +1,6 @@
-use rok_core::encrypt::{Algorithm, EncryptBuilder, Recipient, decrypt};
+use rok_core::encrypt::{decrypt, Algorithm, EncryptBuilder, Recipient};
 use rok_core::envelope::EncryptedEnvelope;
-use rok_core::error::{RokError, Result};
+use rok_core::error::{Result, RokError};
 use rok_core::keys::read::ReadKeyPair;
 use rok_core::keys::scope::Scope;
 use rok_core::keys::spend::SpendKeyPair;
@@ -62,10 +62,7 @@ impl Credential {
     ///
     /// Returns a list of (attribute_name, plaintext_value) pairs for attributes
     /// the key has scope access to. Attributes outside the key's scope are silently skipped.
-    pub fn disclose(
-        &self,
-        read_key: &ReadKeyPair,
-    ) -> Result<Vec<(String, Vec<u8>)>> {
+    pub fn disclose(&self, read_key: &ReadKeyPair) -> Result<Vec<(String, Vec<u8>)>> {
         let mut disclosed = Vec::new();
 
         for attr in &self.attributes {
@@ -107,8 +104,6 @@ impl Credential {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rok_core::keys::key_id::KeyId;
-
     #[test]
     fn test_issue_and_full_disclosure() {
         let spend = SpendKeyPair::from_seed(&[42u8; 32]);

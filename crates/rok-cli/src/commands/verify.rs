@@ -12,7 +12,10 @@ pub fn run(args: VerifyArgs) -> anyhow::Result<()> {
     let sig_bytes = fs::read(&args.sig)?;
 
     if sig_bytes.len() != 64 {
-        anyhow::bail!("signature must be exactly 64 bytes, got {}", sig_bytes.len());
+        anyhow::bail!(
+            "signature must be exactly 64 bytes, got {}",
+            sig_bytes.len()
+        );
     }
     let mut signature = [0u8; 64];
     signature.copy_from_slice(&sig_bytes);

@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package rok;
+
+/// Ed25519 spend public key (the user's public identity).
+message SpendPublicKey {
+  bytes key_bytes = 1;   // 32 bytes
+  bytes key_id = 2;      // 8 bytes, SHA-256(key_bytes)[:8]
+}
+
+/// X25519 read public key with its associated scope.
+message ReadPublicKey {
+  bytes key_bytes = 1;   // 32 bytes
+  string scope = 2;      // e.g., "/finance/q1"
+  bytes key_id = 3;      // 8 bytes
+  bytes parent_key_id = 4; // 8 bytes, empty if root
+}
+
+/// Exported read key for delegation (contains secret material).
+message ExportedReadKey {
+  bytes secret_bytes = 1;     // 32 bytes (X25519 static secret)
+  bytes public_bytes = 2;     // 32 bytes (X25519 public)
+  string scope = 3;
+  bytes parent_key_id = 4;    // 8 bytes, empty if root
+}
+
+/// Post-quantum (ML-KEM-768) public encapsulation key.
+message PqPublicKey {
+  bytes encapsulation_key = 1;  // ML-KEM-768 encapsulation key bytes
+  bytes key_id = 2;             // 8 bytes
+}

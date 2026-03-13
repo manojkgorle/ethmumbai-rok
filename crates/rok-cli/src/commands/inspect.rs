@@ -2,17 +2,25 @@ use std::fs;
 
 use rok_core::envelope::EncryptedEnvelope;
 
-use crate::cli::InspectArgs;
+use crate::cli::{Format, InspectArgs};
 
 pub fn run(args: InspectArgs) -> anyhow::Result<()> {
     let data = fs::read(&args.file)?;
-    let envelope = EncryptedEnvelope::from_bytes(&data)?;
+    let envelope = match args.format {
+        Format::Binary => EncryptedEnvelope::from_bytes(&data)?,
+        Format::Proto => EncryptedEnvelope::from_proto_bytes(&data)?,
+    };
     let meta = envelope.metadata();
 
+    let format_label = match args.format {
+        Format::Binary => "binary",
+        Format::Proto => "protobuf",
+    };
     println!("=== Envelope: {} ===", args.file.display());
     println!("  Version: {}", meta.version);
     println!("  Algorithm: {:?}", meta.algorithm);
     println!("  Scope: {}", meta.scope);
+    println!("  Format: {}", format_label);
     println!("  Recipients: {}", meta.recipient_count);
     println!("  Ciphertext size: {} bytes", meta.ciphertext_len);
     println!("  Total file size: {} bytes", data.len());

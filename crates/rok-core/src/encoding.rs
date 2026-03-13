@@ -1,11 +1,11 @@
 use ed25519_dalek::VerifyingKey;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use x25519_dalek::PublicKey as X25519PublicKey;
 
-use crate::error::{RokError, Result};
+use crate::error::{Result, RokError};
+use crate::keys::key_id::KeyId;
 use crate::keys::read::ExportedReadKey;
 use crate::keys::scope::Scope;
-use crate::keys::key_id::KeyId;
 
 /// Type tags for encoded keys.
 const TAG_SPEND_PUBLIC: u8 = 0x01;
@@ -130,7 +130,9 @@ pub fn decode_exported_read_key(encoded: &str) -> Result<ExportedReadKey> {
     let bytes = decode_with_tag(encoded, TAG_READ_SECRET)?;
 
     if bytes.len() < 65 {
-        return Err(RokError::EncodingError("exported read key too short".into()));
+        return Err(RokError::EncodingError(
+            "exported read key too short".into(),
+        ));
     }
 
     let mut secret_bytes = [0u8; 32];
@@ -202,7 +204,10 @@ mod tests {
         assert_eq!(decoded.secret_bytes, exported.secret_bytes);
         assert_eq!(decoded.public_bytes, exported.public_bytes);
         assert_eq!(decoded.scope, exported.scope);
-        assert_eq!(decoded.parent_key_id.map(|k| *k.as_bytes()), exported.parent_key_id.map(|k| *k.as_bytes()));
+        assert_eq!(
+            decoded.parent_key_id.map(|k| *k.as_bytes()),
+            exported.parent_key_id.map(|k| *k.as_bytes())
+        );
     }
 
     #[test]

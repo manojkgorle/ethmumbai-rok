@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package rok;
+
+/// A single access rule: maps a scope to authorized recipients.
+message AccessRule {
+  string scope = 1;
+  repeated bytes recipient_key_ids = 2;  // Each 8 bytes
+  uint64 expires_at = 3;                 // Unix timestamp, 0 = no expiry
+}
+
+/// Declarative scope-to-recipients policy.
+message AccessPolicy {
+  repeated AccessRule rules = 1;
+}
+
+/// An entry in the revocation list.
+message RevocationEntry {
+  bytes key_id = 1;           // 8 bytes
+  uint64 revoked_at = 2;     // Unix timestamp
+  string reason = 3;
+}
+
+/// List of revoked keys (advisory — true revocation requires re-encryption).
+message RevocationList {
+  repeated RevocationEntry entries = 1;
+}

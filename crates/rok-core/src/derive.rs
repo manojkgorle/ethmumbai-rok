@@ -2,7 +2,7 @@ use hkdf::Hkdf;
 use sha2::Sha256;
 use zeroize::Zeroize;
 
-use crate::error::{RokError, Result};
+use crate::error::{Result, RokError};
 use crate::keys::key_id::KeyId;
 use crate::keys::scope::Scope;
 
@@ -81,10 +81,7 @@ pub(crate) fn derive_child_read_secret(
 /// Derive a wrapping key from an ECDH shared secret and a recipient's key ID.
 ///
 /// Used to wrap the per-envelope data key for a specific recipient.
-pub(crate) fn derive_wrapping_key(
-    shared_secret: &[u8; 32],
-    key_id: &KeyId,
-) -> [u8; 32] {
+pub(crate) fn derive_wrapping_key(shared_secret: &[u8; 32], key_id: &KeyId) -> [u8; 32] {
     let hk = Hkdf::<Sha256>::new(Some(DOMAIN_KEY_WRAP), shared_secret);
     let mut output = [0u8; 32];
     hk.expand(key_id.as_bytes(), &mut output)
@@ -96,10 +93,7 @@ pub(crate) fn derive_wrapping_key(
 ///
 /// The combined secret is secure as long as at least one of the two
 /// underlying shared secrets remains uncompromised.
-pub fn combine_hybrid_secrets(
-    x25519_shared: &[u8; 32],
-    mlkem_shared: &[u8],
-) -> [u8; 32] {
+pub fn combine_hybrid_secrets(x25519_shared: &[u8; 32], mlkem_shared: &[u8]) -> [u8; 32] {
     let mut combined_ikm = Vec::with_capacity(32 + mlkem_shared.len());
     combined_ikm.extend_from_slice(x25519_shared);
     combined_ikm.extend_from_slice(mlkem_shared);
@@ -154,8 +148,7 @@ mod tests {
 
         let finance_secret =
             derive_child_read_secret(&parent_secret, &parent_scope, &finance).unwrap();
-        let legal_secret =
-            derive_child_read_secret(&parent_secret, &parent_scope, &legal).unwrap();
+        let legal_secret = derive_child_read_secret(&parent_secret, &parent_scope, &legal).unwrap();
         assert_ne!(finance_secret, legal_secret);
     }
 

@@ -1,5 +1,6 @@
 mod cli;
 mod commands;
+mod output;
 
 use clap::Parser;
 use cli::{Cli, Command};
@@ -15,6 +16,8 @@ fn main() -> anyhow::Result<()> {
         Command::Sign(args) => commands::sign::run(args),
         Command::Verify(args) => commands::verify::run(args),
         Command::Grant(args) => commands::grant::run(args),
+        Command::Revoke(args) => commands::revoke::run(args),
         Command::Inspect(args) => commands::inspect::run(args),
+        Command::Keyring(args) => commands::keyring::run(args),
     }
 }

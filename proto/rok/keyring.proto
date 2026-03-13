@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package rok;
+
+/// An encrypted spend key stored in the keyring.
+message EncryptedSpendKey {
+  string label = 1;
+  bytes encrypted_seed = 2;     // AES-256-GCM-SIV(argon2id_key, seed)
+  bytes nonce = 3;              // 12 bytes
+  bytes salt = 4;               // Argon2id salt (16 bytes)
+}
+
+/// An encrypted read key stored in the keyring.
+message EncryptedReadKey {
+  bytes key_id = 1;             // 8 bytes
+  string scope = 2;
+  bytes parent_key_id = 3;      // 8 bytes, empty if root
+  bytes encrypted_secret = 4;   // AES-256-GCM-SIV encrypted secret bytes
+  bytes nonce = 5;              // 12 bytes
+  uint64 created_at = 6;        // Unix timestamp
+  bool revoked = 7;
+  string label = 8;
+}
+
+/// A keyring entry (either spend or read key).
+message KeyringEntry {
+  oneof key {
+    EncryptedSpendKey spend_key = 1;
+    EncryptedReadKey read_key = 2;
+  }
+}
+
+/// The full keyring stored on disk.
+message Keyring {
+  uint32 version = 1;
+  repeated KeyringEntry entries = 2;
+}

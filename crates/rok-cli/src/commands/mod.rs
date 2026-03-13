@@ -1,8 +1,10 @@
-pub mod keygen;
+pub mod decrypt;
 pub mod derive;
 pub mod encrypt;
-pub mod decrypt;
-pub mod sign;
-pub mod verify;
 pub mod grant;
 pub mod inspect;
+pub mod keygen;
+pub mod keyring;
+pub mod revoke;
+pub mod sign;
+pub mod verify;

@@ -1,7 +1,7 @@
+use crate::encrypt::Algorithm;
+use crate::error::{Result, RokError};
 use crate::keys::key_id::KeyId;
 use crate::keys::scope::Scope;
-use crate::encrypt::Algorithm;
-use crate::error::{RokError, Result};
 
 /// An access entry: a wrapped data key for one recipient.
 #[derive(Debug, Clone)]
@@ -159,7 +159,9 @@ impl EncryptedEnvelope {
 
         let read_bytes = |pos: &mut usize, n: usize| -> Result<&[u8]> {
             if *pos + n > data.len() {
-                return Err(RokError::SerializationError("unexpected end of data".into()));
+                return Err(RokError::SerializationError(
+                    "unexpected end of data".into(),
+                ));
             }
             let slice = &data[*pos..*pos + n];
             *pos += n;
@@ -200,16 +202,14 @@ impl EncryptedEnvelope {
         };
 
         // Access entries
-        let entry_count =
-            u16::from_le_bytes(read_bytes(&mut pos, 2)?.try_into().unwrap()) as usize;
+        let entry_count = u16::from_le_bytes(read_bytes(&mut pos, 2)?.try_into().unwrap()) as usize;
         let mut access_entries = Vec::with_capacity(entry_count);
         for _ in 0..entry_count {
             let mut key_id_bytes = [0u8; 8];
             key_id_bytes.copy_from_slice(read_bytes(&mut pos, 8)?);
             let read_key_id = KeyId::from_bytes(key_id_bytes);
 
-            let wdk_len =
-                u16::from_le_bytes(read_bytes(&mut pos, 2)?.try_into().unwrap()) as usize;
+            let wdk_len = u16::from_le_bytes(read_bytes(&mut pos, 2)?.try_into().unwrap()) as usize;
             let wrapped_data_key = read_bytes(&mut pos, wdk_len)?.to_vec();
 
             let mut wrap_nonce = [0u8; 12];
@@ -291,7 +291,10 @@ mod tests {
         assert_eq!(restored.version, envelope.version);
         assert_eq!(restored.algorithm, envelope.algorithm);
         assert_eq!(restored.scope, envelope.scope);
-        assert_eq!(restored.ephemeral_x25519_public, envelope.ephemeral_x25519_public);
+        assert_eq!(
+            restored.ephemeral_x25519_public,
+            envelope.ephemeral_x25519_public
+        );
         assert_eq!(restored.access_entries.len(), 1);
         assert_eq!(restored.nonce, envelope.nonce);
         assert_eq!(restored.ciphertext, envelope.ciphertext);

@@ -3,14 +3,14 @@ use aes_gcm_siv::{
     Aes256GcmSiv, Nonce as AesNonce,
 };
 use chacha20poly1305::{ChaCha20Poly1305, Nonce as ChaChaNonce};
-use ed25519_dalek::{Signer, VerifyingKey, Verifier, Signature};
+use ed25519_dalek::{Signature, Signer, Verifier, VerifyingKey};
 use rand_core::CryptoRngCore;
 use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 use zeroize::Zeroize;
 
 use crate::derive;
 use crate::envelope::{AccessEntry, EncryptedEnvelope};
-use crate::error::{RokError, Result};
+use crate::error::{Result, RokError};
 use crate::keys::key_id::KeyId;
 use crate::keys::read::ReadKeyPair;
 use crate::keys::scope::Scope;
@@ -279,14 +279,11 @@ mod tests {
             key_id: root_read.key_id(),
         };
 
-        let envelope = EncryptBuilder::new(
-            Algorithm::EciesX25519ChaCha20,
-            Scope::root(),
-        )
-        .add_recipient(recipient)
-        .set_spend_key(&spend)
-        .encrypt(plaintext, &mut rng)
-        .unwrap();
+        let envelope = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, Scope::root())
+            .add_recipient(recipient)
+            .set_spend_key(&spend)
+            .encrypt(plaintext, &mut rng)
+            .unwrap();
 
         let decrypted = decrypt(&envelope, &root_read, &spend.verifying_key()).unwrap();
         assert_eq!(decrypted, plaintext);
@@ -367,14 +364,11 @@ mod tests {
             key_id: root_read.key_id(),
         };
 
-        let mut envelope = EncryptBuilder::new(
-            Algorithm::EciesX25519ChaCha20,
-            Scope::root(),
-        )
-        .add_recipient(recipient)
-        .set_spend_key(&spend)
-        .encrypt(b"secret", &mut rng)
-        .unwrap();
+        let mut envelope = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, Scope::root())
+            .add_recipient(recipient)
+            .set_spend_key(&spend)
+            .encrypt(b"secret", &mut rng)
+            .unwrap();
 
         // Tamper with ciphertext — this should fail signature verification
         // since the signable bytes include the ciphertext
@@ -395,14 +389,11 @@ mod tests {
             key_id: root_read.key_id(),
         };
 
-        let envelope = EncryptBuilder::new(
-            Algorithm::EciesX25519ChaCha20,
-            Scope::root(),
-        )
-        .add_recipient(recipient)
-        .set_spend_key(&spend1)
-        .encrypt(b"secret", &mut rng)
-        .unwrap();
+        let envelope = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, Scope::root())
+            .add_recipient(recipient)
+            .set_spend_key(&spend1)
+            .encrypt(b"secret", &mut rng)
+            .unwrap();
 
         // Verify with wrong spend key
         let result = decrypt(&envelope, &root_read, &spend2.verifying_key());
@@ -419,14 +410,11 @@ mod tests {
             key_id: root_read.key_id(),
         };
 
-        let envelope = EncryptBuilder::new(
-            Algorithm::EciesX25519ChaCha20,
-            Scope::root(),
-        )
-        .add_recipient(recipient)
-        .set_spend_key(&spend)
-        .encrypt(b"", &mut rng)
-        .unwrap();
+        let envelope = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, Scope::root())
+            .add_recipient(recipient)
+            .set_spend_key(&spend)
+            .encrypt(b"", &mut rng)
+            .unwrap();
 
         let decrypted = decrypt(&envelope, &root_read, &spend.verifying_key()).unwrap();
         assert!(decrypted.is_empty());
@@ -444,14 +432,11 @@ mod tests {
             key_id: root_read.key_id(),
         };
 
-        let envelope = EncryptBuilder::new(
-            Algorithm::EciesX25519ChaCha20,
-            Scope::root(),
-        )
-        .add_recipient(recipient)
-        .set_spend_key(&spend)
-        .encrypt(&plaintext, &mut rng)
-        .unwrap();
+        let envelope = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, Scope::root())
+            .add_recipient(recipient)
+            .set_spend_key(&spend)
+            .encrypt(&plaintext, &mut rng)
+            .unwrap();
 
         let decrypted = decrypt(&envelope, &root_read, &spend.verifying_key()).unwrap();
         assert_eq!(decrypted, plaintext);
@@ -462,12 +447,9 @@ mod tests {
         let spend = SpendKeyPair::from_seed(&[42u8; 32]);
         let mut rng = rand::thread_rng();
 
-        let result = EncryptBuilder::new(
-            Algorithm::EciesX25519ChaCha20,
-            Scope::root(),
-        )
-        .set_spend_key(&spend)
-        .encrypt(b"secret", &mut rng);
+        let result = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, Scope::root())
+            .set_spend_key(&spend)
+            .encrypt(b"secret", &mut rng);
 
         assert!(result.is_err());
     }
@@ -483,12 +465,9 @@ mod tests {
             key_id: root_read.key_id(),
         };
 
-        let result = EncryptBuilder::new(
-            Algorithm::EciesX25519ChaCha20,
-            Scope::root(),
-        )
-        .add_recipient(recipient)
-        .encrypt(b"secret", &mut rng);
+        let result = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, Scope::root())
+            .add_recipient(recipient)
+            .encrypt(b"secret", &mut rng);
 
         assert!(result.is_err());
     }

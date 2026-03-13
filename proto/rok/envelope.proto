@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package rok;
+
+/// Encryption algorithm.
+enum Algorithm {
+  ALGORITHM_UNSPECIFIED = 0;
+  ECIES_X25519_CHACHA20 = 1;
+  HYBRID_X25519_MLKEM_CHACHA20 = 2;
+}
+
+/// A wrapped data key for one recipient.
+message AccessEntry {
+  bytes read_key_id = 1;        // 8 bytes
+  bytes wrapped_data_key = 2;   // AES-256-GCM-SIV encrypted data key
+  bytes wrap_nonce = 3;         // 12 bytes
+}
+
+/// The encrypted envelope — the core wire format for encrypted data.
+message EncryptedEnvelope {
+  uint32 version = 1;
+  Algorithm algorithm = 2;
+  string scope = 3;
+
+  // Ephemeral key material
+  bytes ephemeral_x25519_public = 4;     // 32 bytes
+  bytes ephemeral_mlkem_ciphertext = 5;  // ML-KEM-768 ciphertext (empty if classical)
+
+  // Per-recipient access
+  repeated AccessEntry access_entries = 6;
+
+  // Encrypted payload
+  bytes nonce = 7;          // 12 bytes (ChaCha20-Poly1305 nonce)
+  bytes ciphertext = 8;
+  bytes tag = 9;            // 16 bytes (Poly1305 tag)
+
+  // Authenticity
+  bytes spend_public_key = 10;  // 32 bytes
+  bytes signature = 11;         // 64 bytes (Ed25519)
+}

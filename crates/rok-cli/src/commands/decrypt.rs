@@ -5,7 +5,7 @@ use rok_core::encrypt;
 use rok_core::envelope::EncryptedEnvelope;
 use rok_core::keys::read::ReadKeyPair;
 
-use crate::cli::DecryptArgs;
+use crate::cli::{DecryptArgs, Format};
 
 pub fn run(args: DecryptArgs) -> anyhow::Result<()> {
     // Parse read key
@@ -15,9 +15,12 @@ pub fn run(args: DecryptArgs) -> anyhow::Result<()> {
     // Parse spend public key
     let spend_vk = encoding::decode_spend_public(&args.spend_public)?;
 
-    // Read envelope
+    // Read and deserialize envelope
     let envelope_bytes = fs::read(&args.file)?;
-    let envelope = EncryptedEnvelope::from_bytes(&envelope_bytes)?;
+    let envelope = match args.format {
+        Format::Binary => EncryptedEnvelope::from_bytes(&envelope_bytes)?,
+        Format::Proto => EncryptedEnvelope::from_proto_bytes(&envelope_bytes)?,
+    };
 
     // Decrypt
     let plaintext = encrypt::decrypt(&envelope, &read_key, &spend_vk)?;
@@ -25,7 +28,11 @@ pub fn run(args: DecryptArgs) -> anyhow::Result<()> {
     // Write output
     let output_path = args.output.unwrap_or_else(|| {
         let mut p = args.file.clone();
-        let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let name = p
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
         if let Some(stripped) = name.strip_suffix(".rok") {
             p.set_file_name(stripped);
         } else {
@@ -36,7 +43,11 @@ pub fn run(args: DecryptArgs) -> anyhow::Result<()> {
 
     fs::write(&output_path, &plaintext)?;
 
-    println!("Decrypted {} -> {}", args.file.display(), output_path.display());
+    println!(
+        "Decrypted {} -> {}",
+        args.file.display(),
+        output_path.display()
+    );
     println!("  Scope: {}", envelope.scope);
     println!("  Size: {} bytes", plaintext.len());
 

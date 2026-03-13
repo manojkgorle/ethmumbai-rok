@@ -28,9 +28,13 @@ pub fn run(args: SignArgs) -> anyhow::Result<()> {
         p
     });
 
-    fs::write(&output_path, &signature)?;
+    fs::write(&output_path, signature)?;
 
-    println!("Signed {} -> {}", args.file.display(), output_path.display());
+    println!(
+        "Signed {} -> {}",
+        args.file.display(),
+        output_path.display()
+    );
     println!("  Signature: {}", hex::encode(signature));
 
     Ok(())

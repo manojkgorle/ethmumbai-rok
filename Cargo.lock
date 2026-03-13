@@ -817,6 +817,8 @@ dependencies = [
  "rok-core",
  "rok-pq",
  "rok-sdk",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

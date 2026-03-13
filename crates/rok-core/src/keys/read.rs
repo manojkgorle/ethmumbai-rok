@@ -2,7 +2,7 @@ use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::Zeroize;
 
 use crate::derive;
-use crate::error::{RokError, Result};
+use crate::error::{Result, RokError};
 use crate::keys::key_id::KeyId;
 use crate::keys::scope::Scope;
 
@@ -259,9 +259,7 @@ mod tests {
         let spend = SpendKeyPair::from_seed(&[42u8; 32]);
         let root = spend.derive_root_read_key();
 
-        let abc_direct = root
-            .derive_child(&Scope::new("/a/b/c").unwrap())
-            .unwrap();
+        let abc_direct = root.derive_child(&Scope::new("/a/b/c").unwrap()).unwrap();
 
         let a = root.derive_child_segment("a").unwrap();
         let ab = a.derive_child_segment("b").unwrap();
