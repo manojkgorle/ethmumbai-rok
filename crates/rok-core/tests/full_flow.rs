@@ -246,9 +246,10 @@ fn test_cross_scope_isolation() {
     // Finance can decrypt
     assert_eq!(decrypt(&envelope, &finance, &vk).unwrap(), b"finance only");
 
-    // Legal cannot (scope mismatch)
+    // Legal cannot (not a recipient — in recipient mode, scope check is skipped
+    // and the cryptographic access entry lookup is the gatekeeper)
     let err = decrypt(&envelope, &legal, &vk).unwrap_err();
-    assert!(err.to_string().contains("scope mismatch"));
+    assert!(err.to_string().contains("no matching access entry"));
 
     // Root can (ancestor scope, but no access entry for root key)
     // Root has scope access but wasn't added as recipient

@@ -10,15 +10,16 @@
 //! Run with:
 //!   cargo run --example sectioned_markdown -p rok-core
 
-use rok_core::encrypt::{decrypt, Algorithm, EncryptBuilder};
+use rok_core::encrypt::{decrypt, Algorithm, EncryptBuilder, Recipient};
+use rok_core::keys::read::ReadKeyPair;
 use rok_core::keys::scope::Scope;
 use rok_core::keys::spend::SpendKeyPair;
 use rok_core::sectioned::SectionedEnvelopeBuilder;
 
-/// A parsed markdown section with a scope tag.
+/// A parsed markdown section with one or more scope tags.
 struct MarkdownSection {
     name: String,
-    scope: String,
+    scopes: Vec<String>,
     content: String,
 }
 
@@ -30,11 +31,16 @@ struct MarkdownSection {
 /// body text...
 /// ```
 ///
+/// Multiple scopes (cross-scope access) use comma separation:
+/// ```markdown
+/// ## Joint Review <!-- scope: /finance, /legal -->
+/// ```
+///
 /// Any text before the first heading goes into an "intro" section at root scope.
 fn parse_markdown(input: &str) -> Vec<MarkdownSection> {
     let mut sections = Vec::new();
     let mut current_name = String::from("intro");
-    let mut current_scope = String::from("/");
+    let mut current_scopes = vec!["/".to_string()];
     let mut current_body = String::new();
 
     for line in input.lines() {
@@ -44,17 +50,21 @@ fn parse_markdown(input: &str) -> Vec<MarkdownSection> {
             if !body.is_empty() {
                 sections.push(MarkdownSection {
                     name: current_name.clone(),
-                    scope: current_scope.clone(),
+                    scopes: current_scopes.clone(),
                     content: body,
                 });
             }
             current_body.clear();
 
             // Parse heading: "# Title <!-- scope: /path -->"
+            // or multi-scope: "# Title <!-- scope: /finance, /legal -->"
             if let Some(scope_start) = line.find("<!-- scope:") {
                 let after = &line[scope_start + 11..];
                 if let Some(scope_end) = after.find("-->") {
-                    current_scope = after[..scope_end].trim().to_string();
+                    current_scopes = after[..scope_end]
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .collect();
                 }
                 current_name = line[..scope_start]
                     .trim_start_matches('#')
@@ -62,7 +72,7 @@ fn parse_markdown(input: &str) -> Vec<MarkdownSection> {
                     .to_string();
             } else {
                 current_name = line.trim_start_matches('#').trim().to_string();
-                current_scope = "/".to_string();
+                current_scopes = vec!["/".to_string()];
             }
         } else {
             current_body.push_str(line);
@@ -75,7 +85,7 @@ fn parse_markdown(input: &str) -> Vec<MarkdownSection> {
     if !body.is_empty() {
         sections.push(MarkdownSection {
             name: current_name,
-            scope: current_scope,
+            scopes: current_scopes,
             content: body,
         });
     }
@@ -84,6 +94,15 @@ fn parse_markdown(input: &str) -> Vec<MarkdownSection> {
 }
 
 fn main() {
+    scope_based_example();
+    println!("\n{}\n", "=".repeat(72));
+    mixed_mode_example();
+}
+
+/// Original example: each section has a single scope, using scope-based encryption.
+fn scope_based_example() {
+    println!(">>> EXAMPLE 1: Pure scope-based (single scope per section)\n");
+
     let document = r#"# Company Report <!-- scope: / -->
 This is the public introduction visible to all key holders.
 
@@ -106,25 +125,21 @@ Sprint velocity: 42 points/week.
 Next milestone: v2.0 launch in Q3.
 "#;
 
-    // --- Step 1: Parse the markdown ---
     let sections = parse_markdown(document);
-    println!("Parsed {} sections from markdown:\n", sections.len());
+    println!("Parsed {} sections:\n", sections.len());
     for s in &sections {
         println!(
-            "  [{}] scope={} ({} bytes)",
-            s.name,
-            s.scope,
-            s.content.len()
+            "  [{}] scopes={:?} ({} bytes)",
+            s.name, s.scopes, s.content.len()
         );
     }
 
-    // --- Step 2: Encrypt each section with its scope ---
     let mut rng = rand::thread_rng();
     let spend = SpendKeyPair::from_seed(&[42u8; 32]);
 
     let mut builder = SectionedEnvelopeBuilder::new();
     for s in &sections {
-        let scope = Scope::new(&s.scope).unwrap();
+        let scope = Scope::new(&s.scopes[0]).unwrap();
         let envelope = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, scope)
             .set_spend_key(&spend)
             .set_scope_based()
@@ -140,20 +155,17 @@ Next milestone: v2.0 launch in Q3.
         bytes.len()
     );
 
-    // --- Step 3: Derive keys for different roles ---
     let root_read = spend.derive_root_read_key();
     let finance_key = root_read.derive_child_segment("finance").unwrap();
     let legal_key = root_read.derive_child_segment("legal").unwrap();
     let engineering_key = root_read.derive_child_segment("engineering").unwrap();
 
-    // Derive a /finance/detailed key BEFORE encryption exists
     let pre_finance_detailed = finance_key.derive_child_segment("detailed").unwrap();
     println!(
         "\nPre-encryption /finance/detailed key:  key_id={}",
         pre_finance_detailed.key_id()
     );
 
-    // --- Step 4: Try decrypting with different keys ---
     println!("\n--- Decrypt with ROOT key (has access to everything) ---");
     decrypt_sections(&sectioned, &root_read, &spend);
 
@@ -169,9 +181,8 @@ Next milestone: v2.0 launch in Q3.
     println!("\n--- Decrypt with PRE-ENCRYPTION /finance/detailed key ---");
     decrypt_sections(&sectioned, &pre_finance_detailed, &spend);
 
-    // --- Step 5: Derive the SAME key AFTER encryption, compare ---
     println!("\n--- Post-encryption key derivation ---");
-    let post_spend = SpendKeyPair::from_seed(&[42u8; 32]); // same seed = same keys
+    let post_spend = SpendKeyPair::from_seed(&[42u8; 32]);
     let post_root = post_spend.derive_root_read_key();
     let post_finance_detailed = post_root
         .derive_child_segment("finance")
@@ -189,6 +200,172 @@ Next milestone: v2.0 launch in Q3.
 
     println!("\n--- Decrypt with POST-ENCRYPTION /finance/detailed key ---");
     decrypt_sections(&sectioned, &post_finance_detailed, &post_spend);
+}
+
+/// New example: mixing scope-based and recipient-based encryption.
+///
+/// Sections with a single scope use scope-based mode (deterministic, post-encryption derivation).
+/// Sections with multiple scopes use recipient mode (explicit key list per cross-scope section).
+fn mixed_mode_example() {
+    println!(">>> EXAMPLE 2: Mixed mode (cross-scope sections via recipient mode)\n");
+
+    let document = r#"# Company Report <!-- scope: / -->
+This is the public introduction visible to all key holders.
+
+## Finance Summary <!-- scope: /finance -->
+Revenue: $4.2M this quarter.
+Burn rate is decreasing. Runway extended to 18 months.
+
+## Legal <!-- scope: /legal -->
+Pending litigation: 2 cases.
+IP portfolio: 12 patents filed, 4 granted.
+
+## Joint Compliance Review <!-- scope: /finance, /legal -->
+Cross-department compliance findings:
+- SOX audit passed for finance controls.
+- Legal cleared all pending regulatory items.
+This section is accessible to BOTH finance and legal, but NOT engineering.
+
+## Engineering <!-- scope: /engineering -->
+Sprint velocity: 42 points/week.
+Next milestone: v2.0 launch in Q3.
+"#;
+
+    let sections = parse_markdown(document);
+    println!("Parsed {} sections:\n", sections.len());
+    for s in &sections {
+        let mode = if s.scopes.len() > 1 {
+            "recipient"
+        } else {
+            "scope-based"
+        };
+        println!(
+            "  [{}] scopes={:?} -> {} mode ({} bytes)",
+            s.name,
+            s.scopes,
+            mode,
+            s.content.len()
+        );
+    }
+
+    let mut rng = rand::thread_rng();
+    let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+    let root_read = spend.derive_root_read_key();
+
+    // Pre-derive scope keys for recipient mode sections
+    let scope_keys: std::collections::HashMap<String, ReadKeyPair> = [
+        "/finance",
+        "/legal",
+        "/engineering",
+    ]
+    .iter()
+    .map(|s| {
+        let key = root_read.derive_child_segment(s.trim_start_matches('/')).unwrap();
+        (s.to_string(), key)
+    })
+    .collect();
+
+    let mut builder = SectionedEnvelopeBuilder::new();
+    for s in &sections {
+        let envelope = if s.scopes.len() == 1 {
+            // Single scope: use scope-based mode (supports post-encryption key derivation)
+            let scope = Scope::new(&s.scopes[0]).unwrap();
+            EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, scope)
+                .set_spend_key(&spend)
+                .set_scope_based()
+                .encrypt(s.content.as_bytes(), &mut rng)
+                .unwrap()
+        } else {
+            // Multiple scopes: use recipient mode with explicit keys.
+            // Include root so the root key holder retains access to everything.
+            let mut recipients: Vec<Recipient> = vec![Recipient {
+                read_public_key: *root_read.public_key(),
+                key_id: root_read.key_id(),
+            }];
+            recipients.extend(s.scopes.iter().map(|scope_str| {
+                let key = &scope_keys[scope_str.as_str()];
+                Recipient {
+                    read_public_key: *key.public_key(),
+                    key_id: key.key_id(),
+                }
+            }));
+
+            let mut eb = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, Scope::root());
+            eb.add_recipients(&recipients).set_spend_key(&spend);
+            eb.encrypt(s.content.as_bytes(), &mut rng).unwrap()
+        };
+        builder.add_section(s.name.clone(), envelope).unwrap();
+    }
+    let mut sectioned = builder.build().unwrap();
+
+    let bytes = sectioned.to_bytes();
+    println!(
+        "\nEncrypted sectioned envelope: {} bytes total",
+        bytes.len()
+    );
+
+    let finance_key = root_read.derive_child_segment("finance").unwrap();
+    let legal_key = root_read.derive_child_segment("legal").unwrap();
+    let engineering_key = root_read.derive_child_segment("engineering").unwrap();
+
+    println!("\n--- Decrypt with ROOT key (has access to everything) ---");
+    decrypt_sections(&sectioned, &root_read, &spend);
+
+    println!("\n--- Decrypt with FINANCE key ---");
+    println!("  (should see: Finance Summary, Joint Compliance Review)");
+    decrypt_sections(&sectioned, &finance_key, &spend);
+
+    println!("\n--- Decrypt with LEGAL key ---");
+    println!("  (should see: Legal, Joint Compliance Review)");
+    decrypt_sections(&sectioned, &legal_key, &spend);
+
+    println!("\n--- Decrypt with ENGINEERING key ---");
+    println!("  (should see: Engineering only — NO joint compliance)");
+    decrypt_sections(&sectioned, &engineering_key, &spend);
+
+    // --- Step: Rekey the Joint Compliance Review section ---
+    // Change access from [root, finance, legal] to [root, legal, engineering]
+    println!("\n--- REKEY: Joint Compliance Review ---");
+    println!("  Changing access: [root, finance, legal] -> [root, legal, engineering]");
+    println!("  (ciphertext stays the same, only access entries + signature change)\n");
+
+    let new_recipients = vec![
+        Recipient {
+            read_public_key: *root_read.public_key(),
+            key_id: root_read.key_id(),
+        },
+        Recipient {
+            read_public_key: *legal_key.public_key(),
+            key_id: legal_key.key_id(),
+        },
+        Recipient {
+            read_public_key: *engineering_key.public_key(),
+            key_id: engineering_key.key_id(),
+        },
+    ];
+
+    // Use root_read (an existing recipient) to authorize the rekey
+    sectioned
+        .rekey_section(
+            "Joint Compliance Review",
+            &root_read,
+            &new_recipients,
+            &spend,
+            &mut rng,
+        )
+        .unwrap();
+
+    println!("--- After rekey: Decrypt with FINANCE key ---");
+    println!("  (should LOSE access to Joint Compliance Review)");
+    decrypt_sections(&sectioned, &finance_key, &spend);
+
+    println!("\n--- After rekey: Decrypt with LEGAL key ---");
+    println!("  (should KEEP access to Joint Compliance Review)");
+    decrypt_sections(&sectioned, &legal_key, &spend);
+
+    println!("\n--- After rekey: Decrypt with ENGINEERING key ---");
+    println!("  (should GAIN access to Joint Compliance Review)");
+    decrypt_sections(&sectioned, &engineering_key, &spend);
 }
 
 fn decrypt_sections(

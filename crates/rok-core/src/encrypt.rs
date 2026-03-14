@@ -317,8 +317,12 @@ pub fn decrypt(
         .verify(&signable, &signature)
         .map_err(|_| RokError::SignatureVerificationFailed)?;
 
-    // 2. Check scope access
-    if !read_key.can_access(&envelope.scope) {
+    // 2. Check scope access (scope-based mode only).
+    //    In recipient mode, the access entries are the sole gatekeepers —
+    //    the ECDH + AES-GCM-SIV unwrap will fail cryptographically if
+    //    the key wasn't listed as a recipient. This allows cross-scope
+    //    envelopes where recipients from different branches share access.
+    if envelope.access_mode == AccessMode::ScopeBased && !read_key.can_access(&envelope.scope) {
         return Err(RokError::ScopeMismatch {
             key_scope: read_key.scope().to_string(),
             data_scope: envelope.scope.to_string(),
@@ -368,6 +372,108 @@ pub fn decrypt(
     data_key.zeroize();
 
     Ok(plaintext)
+}
+
+/// Change the recipient list of a recipient-mode envelope without re-encrypting the payload.
+///
+/// This unwraps the data key using `authorized_key` (which must be a current recipient),
+/// then re-wraps it for each key in `new_recipients`, and re-signs with the spend key.
+/// The ciphertext, nonce, and tag remain unchanged.
+///
+/// Requires the spend key because changing access entries invalidates the signature.
+///
+/// Returns the updated envelope. The original is not modified.
+pub fn rekey_recipients(
+    envelope: &EncryptedEnvelope,
+    authorized_key: &ReadKeyPair,
+    new_recipients: &[Recipient],
+    spend_key: &SpendKeyPair,
+    rng: &mut impl CryptoRngCore,
+) -> Result<EncryptedEnvelope> {
+    if envelope.access_mode == AccessMode::ScopeBased {
+        return Err(RokError::EncryptionError(
+            "rekey_recipients only applies to recipient-mode envelopes".into(),
+        ));
+    }
+
+    if new_recipients.is_empty() {
+        return Err(RokError::EncryptionError(
+            "new recipient list cannot be empty".into(),
+        ));
+    }
+
+    // 1. Verify existing signature
+    let signable = envelope.signable_bytes();
+    let signature = Signature::from_bytes(&envelope.signature);
+    let spend_vk = VerifyingKey::from_bytes(&envelope.spend_public_key)
+        .map_err(|_| RokError::InvalidKeyMaterial)?;
+    spend_vk
+        .verify(&signable, &signature)
+        .map_err(|_| RokError::SignatureVerificationFailed)?;
+
+    // 2. Unwrap data key using authorized_key
+    let my_key_id = authorized_key.key_id();
+    let entry = envelope
+        .access_entries
+        .iter()
+        .find(|e| e.read_key_id == my_key_id)
+        .ok_or_else(|| RokError::NoMatchingAccessEntry(my_key_id.to_string()))?;
+
+    let ephemeral_public = X25519PublicKey::from(envelope.ephemeral_x25519_public);
+    let shared_secret = authorized_key.secret().diffie_hellman(&ephemeral_public);
+    let mut shared_bytes = [0u8; 32];
+    shared_bytes.copy_from_slice(shared_secret.as_bytes());
+
+    let mut data_key_vec = unwrap_data_key(entry, &shared_bytes, &my_key_id)?;
+    shared_bytes.zeroize();
+
+    let mut data_key = [0u8; 32];
+    data_key.copy_from_slice(&data_key_vec);
+    data_key_vec.zeroize();
+
+    // 3. Generate new ephemeral keypair for the new recipient set
+    let mut ephemeral_secret_bytes = [0u8; 32];
+    rng.fill_bytes(&mut ephemeral_secret_bytes);
+    let ephemeral_static = StaticSecret::from(ephemeral_secret_bytes);
+    let new_ephemeral_public = X25519PublicKey::from(&ephemeral_static);
+
+    // 4. Wrap data key for each new recipient
+    let mut new_entries = Vec::with_capacity(new_recipients.len());
+    for recipient in new_recipients {
+        let shared = ephemeral_static.diffie_hellman(&recipient.read_public_key);
+        let mut sb = [0u8; 32];
+        sb.copy_from_slice(shared.as_bytes());
+
+        let new_entry = wrap_data_key(&data_key, &sb, &recipient.key_id, rng)?;
+        sb.zeroize();
+        new_entries.push(new_entry);
+    }
+
+    ephemeral_secret_bytes.zeroize();
+    data_key.zeroize();
+
+    // 5. Assemble updated envelope (ciphertext unchanged)
+    let mut new_envelope = EncryptedEnvelope {
+        version: envelope.version,
+        algorithm: envelope.algorithm,
+        scope: envelope.scope.clone(),
+        ephemeral_x25519_public: *new_ephemeral_public.as_bytes(),
+        ephemeral_mlkem_ciphertext: None,
+        access_entries: new_entries,
+        nonce: envelope.nonce,
+        ciphertext: envelope.ciphertext.clone(),
+        tag: envelope.tag,
+        signature: [0u8; 64],
+        spend_public_key: *spend_key.verifying_key().as_bytes(),
+        access_mode: AccessMode::Recipient,
+    };
+
+    // 6. Re-sign
+    let new_signable = new_envelope.signable_bytes();
+    let new_signature: Signature = spend_key.signing_key().sign(&new_signable);
+    new_envelope.signature = new_signature.to_bytes();
+
+    Ok(new_envelope)
 }
 
 #[cfg(test)]

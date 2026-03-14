@@ -73,6 +73,38 @@ impl SectionedEnvelope {
         }
     }
 
+    /// Rekey a named section's recipients without re-encrypting the payload.
+    ///
+    /// The `authorized_key` must be an existing recipient of the section.
+    /// The section's access entries are replaced with new ones for `new_recipients`,
+    /// and the envelope is re-signed with the spend key.
+    pub fn rekey_section(
+        &mut self,
+        section_name: &str,
+        authorized_key: &crate::keys::read::ReadKeyPair,
+        new_recipients: &[crate::encrypt::Recipient],
+        spend_key: &crate::keys::spend::SpendKeyPair,
+        rng: &mut impl rand_core::CryptoRngCore,
+    ) -> Result<()> {
+        let section = self
+            .sections
+            .iter_mut()
+            .find(|s| s.name == section_name)
+            .ok_or_else(|| {
+                RokError::SerializationError(format!("section not found: {}", section_name))
+            })?;
+
+        section.envelope = crate::encrypt::rekey_recipients(
+            &section.envelope,
+            authorized_key,
+            new_recipients,
+            spend_key,
+            rng,
+        )?;
+
+        Ok(())
+    }
+
     /// Serialize to binary format.
     ///
     /// Format:
