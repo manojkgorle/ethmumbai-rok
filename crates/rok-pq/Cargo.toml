@@ -10,7 +10,9 @@ description = "Post-quantum cryptography module for Read-Only Keys (ML-KEM-768 h
 rok-core = { path = "../rok-core" }
 ml-kem = { workspace = true }
 x25519-dalek = { workspace = true }
+ed25519-dalek = { workspace = true }
 rand = { workspace = true }
 rand_core = { workspace = true }
+rand_chacha = "0.3"
 zeroize = { workspace = true }
 thiserror = { workspace = true }

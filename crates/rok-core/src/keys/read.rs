@@ -103,12 +103,12 @@ impl ReadKeyPair {
     }
 
     /// Reference to the X25519 static secret (for ECDH).
-    pub(crate) fn secret(&self) -> &StaticSecret {
+    pub fn secret(&self) -> &StaticSecret {
         &self.secret
     }
 
     /// Export the secret bytes for this key. Handle with care.
-    fn secret_bytes(&self) -> [u8; 32] {
+    pub fn secret_bytes(&self) -> [u8; 32] {
         // x25519-dalek StaticSecret stores clamped bytes.
         // We need to extract them for HKDF derivation.
         // StaticSecret's to_bytes() returns the internal representation.

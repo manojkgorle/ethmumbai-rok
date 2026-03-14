@@ -47,3 +47,15 @@ message EncryptedEnvelope {
   // Access mode
   AccessMode access_mode = 12;
 }
+
+/// A named section within a sectioned envelope.
+message SectionedSection {
+  string name = 1;
+  EncryptedEnvelope envelope = 2;
+}
+
+/// A container of multiple independently encrypted sections.
+message SectionedEnvelope {
+  uint32 version = 1;
+  repeated SectionedSection sections = 2;
+}

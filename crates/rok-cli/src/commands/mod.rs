@@ -1,6 +1,8 @@
 pub mod decrypt;
+pub mod decrypt_sections;
 pub mod derive;
 pub mod encrypt;
+pub mod encrypt_sections;
 pub mod grant;
 pub mod inspect;
 pub mod keygen;

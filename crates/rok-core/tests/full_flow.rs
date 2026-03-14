@@ -9,6 +9,7 @@ use rok_core::envelope::EncryptedEnvelope;
 use rok_core::keys::read::ReadKeyPair;
 use rok_core::keys::scope::Scope;
 use rok_core::keys::spend::SpendKeyPair;
+use rok_core::sectioned::SectionedEnvelopeBuilder;
 use rok_core::sign;
 
 /// Full lifecycle: keygen -> derive -> encrypt -> serialize -> decrypt
@@ -574,4 +575,227 @@ fn test_scope_based_tamper_rejected() {
 
     let result = decrypt(&envelope, &root, &spend.verifying_key());
     assert!(result.is_err(), "tampered scope-based envelope should fail");
+}
+
+// ==================== Sectioned Envelope Tests ====================
+
+/// Canonical case: encrypt /finance + /legal sections, verify access control
+#[test]
+fn test_sectioned_finance_legal() {
+    let mut rng = rand::thread_rng();
+    let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+    let root = spend.derive_root_read_key();
+    let finance = root.derive_child_segment("finance").unwrap();
+    let legal = root.derive_child_segment("legal").unwrap();
+    let vk = spend.verifying_key();
+
+    // Encrypt two sections at different scopes
+    let finance_envelope = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/finance").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"finance data", &mut rng)
+    .unwrap();
+
+    let legal_envelope = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/legal").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"legal data", &mut rng)
+    .unwrap();
+
+    let mut builder = SectionedEnvelopeBuilder::new();
+    builder
+        .add_section("finance".into(), finance_envelope)
+        .unwrap();
+    builder
+        .add_section("legal".into(), legal_envelope)
+        .unwrap();
+    let sectioned = builder.build().unwrap();
+
+    assert_eq!(sectioned.sections.len(), 2);
+
+    // Root key decrypts both
+    let d1 = decrypt(&sectioned.sections[0].envelope, &root, &vk).unwrap();
+    assert_eq!(d1, b"finance data");
+    let d2 = decrypt(&sectioned.sections[1].envelope, &root, &vk).unwrap();
+    assert_eq!(d2, b"legal data");
+
+    // Finance key decrypts only finance, fails on legal
+    let d3 = decrypt(&sectioned.sections[0].envelope, &finance, &vk).unwrap();
+    assert_eq!(d3, b"finance data");
+    assert!(decrypt(&sectioned.sections[1].envelope, &finance, &vk).is_err());
+
+    // Legal key decrypts only legal, fails on finance
+    assert!(decrypt(&sectioned.sections[0].envelope, &legal, &vk).is_err());
+    let d4 = decrypt(&sectioned.sections[1].envelope, &legal, &vk).unwrap();
+    assert_eq!(d4, b"legal data");
+}
+
+/// All sections scope-based, ancestor key decrypts accessible sections
+#[test]
+fn test_sectioned_scope_based() {
+    let mut rng = rand::thread_rng();
+    let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+    let root = spend.derive_root_read_key();
+    let finance = root.derive_child_segment("finance").unwrap();
+    let vk = spend.verifying_key();
+
+    let fin_q1_envelope = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/finance/q1").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"Q1 data", &mut rng)
+    .unwrap();
+
+    let fin_q2_envelope = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/finance/q2").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"Q2 data", &mut rng)
+    .unwrap();
+
+    let mut builder = SectionedEnvelopeBuilder::new();
+    builder.add_section("q1".into(), fin_q1_envelope).unwrap();
+    builder.add_section("q2".into(), fin_q2_envelope).unwrap();
+    let sectioned = builder.build().unwrap();
+
+    // /finance (ancestor of both /finance/q1 and /finance/q2) decrypts both
+    assert_eq!(
+        decrypt(&sectioned.sections[0].envelope, &finance, &vk).unwrap(),
+        b"Q1 data"
+    );
+    assert_eq!(
+        decrypt(&sectioned.sections[1].envelope, &finance, &vk).unwrap(),
+        b"Q2 data"
+    );
+
+    // Root also decrypts both
+    assert_eq!(
+        decrypt(&sectioned.sections[0].envelope, &root, &vk).unwrap(),
+        b"Q1 data"
+    );
+}
+
+/// Serialize sectioned envelope both ways, decrypt from restored
+#[test]
+fn test_sectioned_binary_proto_roundtrip() {
+    use rok_core::sectioned::SectionedEnvelope;
+
+    let mut rng = rand::thread_rng();
+    let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+    let root = spend.derive_root_read_key();
+    let vk = spend.verifying_key();
+
+    let env1 = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/finance").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"finance roundtrip", &mut rng)
+    .unwrap();
+
+    let env2 = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/legal").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"legal roundtrip", &mut rng)
+    .unwrap();
+
+    let mut builder = SectionedEnvelopeBuilder::new();
+    builder.add_section("finance".into(), env1).unwrap();
+    builder.add_section("legal".into(), env2).unwrap();
+    let sectioned = builder.build().unwrap();
+
+    // Binary roundtrip
+    let binary_bytes = sectioned.to_bytes();
+    let from_binary = SectionedEnvelope::from_bytes(&binary_bytes).unwrap();
+    assert_eq!(from_binary.sections.len(), 2);
+    assert_eq!(
+        decrypt(&from_binary.sections[0].envelope, &root, &vk).unwrap(),
+        b"finance roundtrip"
+    );
+    assert_eq!(
+        decrypt(&from_binary.sections[1].envelope, &root, &vk).unwrap(),
+        b"legal roundtrip"
+    );
+
+    // Proto roundtrip
+    let proto_bytes = sectioned.to_proto_bytes();
+    let from_proto = SectionedEnvelope::from_proto_bytes(&proto_bytes).unwrap();
+    assert_eq!(from_proto.sections.len(), 2);
+    assert_eq!(
+        decrypt(&from_proto.sections[0].envelope, &root, &vk).unwrap(),
+        b"finance roundtrip"
+    );
+    assert_eq!(
+        decrypt(&from_proto.sections[1].envelope, &root, &vk).unwrap(),
+        b"legal roundtrip"
+    );
+}
+
+/// One section classical, one hybrid — both decrypt correctly
+#[test]
+fn test_sectioned_mixed_algorithms() {
+    let mut rng = rand::thread_rng();
+    let spend = SpendKeyPair::from_seed(&[42u8; 32]);
+    let root = spend.derive_root_read_key();
+    let vk = spend.verifying_key();
+
+    // Classical section
+    let classical_envelope = EncryptBuilder::new(
+        Algorithm::EciesX25519ChaCha20,
+        Scope::new("/finance").unwrap(),
+    )
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"classical finance", &mut rng)
+    .unwrap();
+
+    // Hybrid section
+    let hybrid_envelope = rok_pq::envelope::hybrid_encrypt(
+        b"hybrid legal",
+        &Scope::new("/legal").unwrap(),
+        &spend,
+        &mut rng,
+    )
+    .unwrap();
+
+    let mut builder = SectionedEnvelopeBuilder::new();
+    builder
+        .add_section("finance".into(), classical_envelope)
+        .unwrap();
+    builder
+        .add_section("legal".into(), hybrid_envelope)
+        .unwrap();
+    let sectioned = builder.build().unwrap();
+
+    assert_eq!(sectioned.sections.len(), 2);
+    assert_eq!(
+        sectioned.sections[0].envelope.algorithm,
+        Algorithm::EciesX25519ChaCha20
+    );
+    assert_eq!(
+        sectioned.sections[1].envelope.algorithm,
+        Algorithm::HybridX25519MlKemChaCha20
+    );
+
+    // Decrypt classical section
+    let d1 = decrypt(&sectioned.sections[0].envelope, &root, &vk).unwrap();
+    assert_eq!(d1, b"classical finance");
+
+    // Decrypt hybrid section
+    let d2 = rok_pq::envelope::hybrid_decrypt(&sectioned.sections[1].envelope, &root, &vk).unwrap();
+    assert_eq!(d2, b"hybrid legal");
 }

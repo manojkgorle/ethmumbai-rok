@@ -54,6 +54,16 @@ impl SpendKeyPair {
         &self.signing_key
     }
 
+    /// Sign arbitrary bytes with the spend key.
+    ///
+    /// Returns a 64-byte Ed25519 signature. This avoids exposing the
+    /// raw signing key while letting external crates (e.g. rok-pq)
+    /// sign hybrid envelopes.
+    pub fn sign_bytes(&self, data: &[u8]) -> [u8; 64] {
+        use ed25519_dalek::Signer;
+        self.signing_key.sign(data).to_bytes()
+    }
+
     /// Derive the root read key at scope "/".
     ///
     /// This is the top of the read key hierarchy. From this root,

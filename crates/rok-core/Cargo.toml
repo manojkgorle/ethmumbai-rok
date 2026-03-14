@@ -28,3 +28,4 @@ prost-build = { workspace = true }
 
 [dev-dependencies]
 hex = "0.4"
+rok-pq = { path = "../rok-pq" }

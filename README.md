@@ -25,6 +25,7 @@ A key at `/finance` can decrypt anything at `/finance`, `/finance/q1`, `/finance
 - **Dual serialization** — compact binary format (`ROK\x01` magic header) and Protocol Buffers
 - **Authenticated envelopes** — every ciphertext is signed by the spend key (Ed25519)
 - **Key export/import** — delegate read keys with Base58-encoded portable format
+- **Sectioned envelopes** — bundle multiple encrypted sections (each at its own scope) into a single `.roks` file; a `/finance` key decrypts only the finance section while a root key decrypts everything
 - **Selective disclosure credentials** — encrypt individual attributes under different scopes
 - **Zero-copy zeroization** — secrets are zeroized on drop via the `zeroize` crate
 
@@ -33,7 +34,7 @@ A key at `/finance` can decrypt anything at `/finance`, `/finance/q1`, `/finance
 ```
 ┌─────────────────────────────────────────────────┐
 │                   rok-cli                       │
-│         10 commands, clap-based CLI             │
+│         12 commands, clap-based CLI             │
 ├──────────────────┬──────────────────────────────┤
 │     rok-sdk      │                              │
 │  Vault, Pipeline,│         rok-pq               │
@@ -47,9 +48,9 @@ A key at `/finance` can decrypt anything at `/finance`, `/finance/q1`, `/finance
 | Crate | Description |
 |---|---|
 | **rok-core** | Cryptographic primitives: key types, HKDF derivation, encryption/decryption, envelope format, signing, Base58 encoding |
-| **rok-pq** | Post-quantum module: ML-KEM-768 encapsulation and X25519+ML-KEM hybrid combiner |
+| **rok-pq** | Post-quantum module: ML-KEM-768 encapsulation, X25519+ML-KEM hybrid combiner, and end-to-end hybrid envelope encrypt/decrypt |
 | **rok-sdk** | High-level abstractions: encrypted vault, data pipeline, access policy engine, selective disclosure credentials |
-| **rok-cli** | Command-line interface with 10 commands for key management, encryption, signing, and delegation |
+| **rok-cli** | Command-line interface with 12 commands for key management, encryption, signing, and delegation |
 
 ## Cryptographic Primitives
 
@@ -74,6 +75,7 @@ Each HKDF derivation uses a unique domain tag to prevent cross-protocol attacks:
 | `rok-v1-read-child-derive` | Parent read key to child (step-wise per path component) |
 | `rok-v1-key-wrap` | ECDH shared secret to wrapping key |
 | `rok-v1-hybrid-combine` | Combine X25519 + ML-KEM shared secrets |
+| `rok-v1-pq-key-derive` | Derive PQ key seed from read key secret + scope |
 
 ## Installation
 
@@ -161,9 +163,19 @@ rok encrypt \
   --scope /finance/q1 \
   --spend_seed <hex> \
   --scope-based
+
+# Hybrid post-quantum encryption (scope-based only)
+rok encrypt \
+  --file report.pdf \
+  --scope /finance \
+  --spend_seed <hex> \
+  --scope-based \
+  --algorithm hybrid
 ```
 
 With `--scope-based`, a single access entry is created for the scope's derived key. Anyone holding a key at `/finance/q1`, `/finance`, or `/` can automatically decrypt—no need to list them individually.
+
+With `--algorithm hybrid`, the envelope uses X25519 + ML-KEM-768 combined via HKDF. PQ keys are derived deterministically from the read key, so no extra key distribution is needed. Hybrid mode requires `--scope-based`.
 
 ### Decryption
 
@@ -177,7 +189,75 @@ rok decrypt \
   --output secret.pdf
 ```
 
-The read key must have a scope that is an ancestor of (or equal to) the envelope's scope.
+The read key must have a scope that is an ancestor of (or equal to) the envelope's scope. The algorithm is auto-detected from the envelope—no `--algorithm` flag needed for decryption.
+
+### Sectioned Encryption
+
+Encrypt multiple sections at different scopes into a single `.roks` file:
+
+```bash
+# Using --section flags (name:scope:file)
+rok encrypt-sections \
+  --section finance:/finance:finance_report.txt \
+  --section legal:/legal:legal_brief.txt \
+  --spend-seed <hex> \
+  --scope-based \
+  --output document.roks
+
+# Using a JSON manifest
+rok encrypt-sections \
+  --manifest sections.json \
+  --spend-seed <hex> \
+  --scope-based \
+  --output document.roks
+
+# Hybrid post-quantum
+rok encrypt-sections \
+  --section finance:/finance:fin.txt \
+  --section legal:/legal:legal.txt \
+  --spend-seed <hex> \
+  --algorithm hybrid \
+  --output document.roks
+```
+
+Manifest JSON format:
+```json
+[
+  {"name": "finance", "scope": "/finance", "file": "finance_report.txt"},
+  {"name": "legal", "scope": "/legal", "file": "legal_brief.txt"}
+]
+```
+
+### Sectioned Decryption
+
+Decrypt accessible sections from a `.roks` file:
+
+```bash
+# Decrypt all accessible sections
+rok decrypt-sections \
+  --file document.roks \
+  --key <base58-read-key> \
+  --spend-public <base58-spend-public> \
+  --output-dir ./out/
+
+# Decrypt specific sections only
+rok decrypt-sections \
+  --file document.roks \
+  --key <base58-read-key> \
+  --spend-public <base58-spend-public> \
+  --output-dir ./out/ \
+  --section finance
+```
+
+Output:
+```
+  Decrypted: finance -> ./out/finance (1234 bytes)
+  Skipped: legal (no access)
+
+Summary: 1 decrypted, 1 skipped
+```
+
+A `/finance` key decrypts only the finance section. A root key decrypts everything. Inaccessible sections are silently skipped.
 
 ### Signing & Verification
 
@@ -238,6 +318,41 @@ Output:
   Scope: /finance
   Recipients: 3
   Ciphertext Size: 4.2 KB
+```
+
+For hybrid envelopes, additional fields are shown:
+```
+  Hybrid PQ: yes
+  ML-KEM ciphertext size: 1088 bytes
+```
+
+Sectioned envelopes (`.roks`) are auto-detected:
+
+```bash
+rok inspect --file document.roks
+```
+
+Output:
+```
+=== Sectioned Envelope: document.roks ===
+  Version: 1
+  Sections: 2
+  Format: binary
+  Total file size: 1234 bytes
+
+  Section 1 - "finance":
+    Scope: /finance
+    Algorithm: EciesX25519ChaCha20
+    Access mode: scope-based
+    Recipients: 1
+    Ciphertext size: 456 bytes
+
+  Section 2 - "legal":
+    Scope: /legal
+    Algorithm: EciesX25519ChaCha20
+    Access mode: scope-based
+    Recipients: 1
+    Ciphertext size: 389 bytes
 ```
 
 ### Keyring Management
@@ -308,6 +423,45 @@ let envelope = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, Scope::new("/
 // Anyone with /finance/q1, /finance, or root key can decrypt
 let plaintext = decrypt(&envelope, &finance_key, &spend.verifying_key())?;
 let plaintext = decrypt(&envelope, &root_read, &spend.verifying_key())?;
+```
+
+### Sectioned Envelopes
+
+Bundle multiple encrypted sections into a single container. Each section has its own scope and is independently encrypted:
+
+```rust
+use rok_core::encrypt::{Algorithm, EncryptBuilder, decrypt};
+use rok_core::keys::scope::Scope;
+use rok_core::sectioned::SectionedEnvelopeBuilder;
+
+// Encrypt sections at different scopes
+let finance_env = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, Scope::new("/finance")?)
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"finance data", &mut rng)?;
+
+let legal_env = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, Scope::new("/legal")?)
+    .set_spend_key(&spend)
+    .set_scope_based()
+    .encrypt(b"legal data", &mut rng)?;
+
+// Bundle into a single sectioned envelope
+let mut builder = SectionedEnvelopeBuilder::new();
+builder.add_section("finance".into(), finance_env)?;
+builder.add_section("legal".into(), legal_env)?;
+let sectioned = builder.build()?;
+
+// Serialize (binary ROKS format or protobuf)
+let bytes = sectioned.to_bytes();
+let proto_bytes = sectioned.to_proto_bytes();
+
+// Root key decrypts all sections
+for section in &sectioned.sections {
+    let plaintext = decrypt(&section.envelope, &root_read, &spend.verifying_key())?;
+}
+
+// Finance key decrypts only the finance section
+let finance_data = decrypt(&sectioned.sections[0].envelope, &finance_key, &spend.verifying_key())?;
 ```
 
 ### Key Hierarchy & Access Control
@@ -428,31 +582,35 @@ let revealed = credential.reveal(&["name", "age"], &public_read_key, &spend.veri
 // "ssn" remains encrypted — the verifier never sees it
 ```
 
-### rok-pq — Post-Quantum Hybrid
+### rok-pq — Post-Quantum Hybrid Encryption
+
+End-to-end hybrid encrypt/decrypt with scope-based access. PQ keys are derived deterministically from the read key—no extra key distribution needed:
 
 ```rust
-use rok_pq::hybrid::{hybrid_encapsulate, hybrid_decapsulate, HybridRecipient};
+use rok_pq::envelope::{hybrid_encrypt, hybrid_decrypt};
+use rok_core::keys::scope::Scope;
+
+// Hybrid encrypt: X25519 + ML-KEM-768 + ChaCha20-Poly1305
+let scope = Scope::new("/finance")?;
+let envelope = hybrid_encrypt(b"secret data", &scope, &spend, &mut rng)?;
+
+// Any ancestor key holder can decrypt (auto-derives to envelope scope)
+let plaintext = hybrid_decrypt(&envelope, &root_read, &spend.verifying_key())?;
+let plaintext = hybrid_decrypt(&envelope, &finance_key, &spend.verifying_key())?;
+```
+
+The low-level primitives are also available for custom protocols:
+
+```rust
 use rok_pq::kem::PqKeyPair;
+use rok_pq::hybrid::{hybrid_encapsulate, hybrid_decapsulate, HybridRecipient};
+use rok_pq::pq_derive::derive_pq_keypair;
 
-// Generate ML-KEM-768 keypair alongside X25519
+// Deterministic PQ key derivation from read key + scope
+let pq_keypair = derive_pq_keypair(&read_secret_bytes, &scope);
+
+// Or generate a random ML-KEM-768 keypair
 let pq_keypair = PqKeyPair::generate(&mut rng);
-
-let recipient = HybridRecipient {
-    x25519_public: read_key.public_key(),
-    mlkem_encapsulation_key: pq_keypair.encapsulation_key(),
-};
-
-// Hybrid encapsulate: X25519 ECDH + ML-KEM-768, combined via HKDF
-let encapsulation = hybrid_encapsulate(&recipient, &mut rng)?;
-// encapsulation.combined_shared_secret — 32-byte key, secure if either algorithm holds
-
-// Decapsulate
-let shared_secret = hybrid_decapsulate(
-    &encapsulation.mlkem_ciphertext,
-    &ephemeral_x25519_public,
-    &read_secret,
-    &pq_keypair,
-)?;
 ```
 
 ## Serialization Formats
@@ -470,6 +628,19 @@ ROK\x01 | version(4) | algorithm(1) | access_mode(1) | scope_len(2) | scope
 
 Version 1 envelopes omit `access_mode` (implicitly `Recipient`). Version 2+ includes it.
 
+### Sectioned Binary Format
+
+Sectioned envelopes use a distinct `ROKS` magic header:
+
+```
+ROKS (4 bytes magic)
+version (u32 LE)
+section_count (u16 LE)
+For each section:
+  name_len (u16 LE) | name (UTF-8)
+  envelope_len (u32 LE) | EncryptedEnvelope::to_bytes() (complete inner envelope with ROK\x01 header)
+```
+
 ### Protocol Buffers
 
 Defined in `proto/rok/`:
@@ -477,7 +648,7 @@ Defined in `proto/rok/`:
 | File | Messages |
 |---|---|
 | `keys.proto` | `SpendPublicKey`, `ReadPublicKey`, `ExportedReadKey`, `PqPublicKey` |
-| `envelope.proto` | `EncryptedEnvelope`, `AccessEntry`, `Algorithm` enum, `AccessMode` enum |
+| `envelope.proto` | `EncryptedEnvelope`, `AccessEntry`, `SectionedEnvelope`, `SectionedSection`, `Algorithm` enum, `AccessMode` enum |
 | `keyring.proto` | `Keyring`, `KeyringEntry`, `EncryptedSpendKey`, `EncryptedReadKey` |
 | `access.proto` | `AccessPolicy`, `AccessRule`, `RevocationList`, `RevocationEntry` |
 
@@ -511,7 +682,7 @@ GitHub Actions runs on every push to `main` and on pull requests:
 | Job | Command | Purpose |
 |---|---|---|
 | **check** | `cargo check --workspace` | Compilation check |
-| **test** | `cargo test --workspace` | Run all 117 tests |
+| **test** | `cargo test --workspace` | Run all 136 tests |
 | **clippy** | `cargo clippy --workspace -- -D warnings` | Lint (warnings are errors) |
 | **fmt** | `cargo fmt --all -- --check` | Formatting check |
 | **deny** | `cargo deny check` | Supply chain audit (CVEs, licenses, sources) |
@@ -562,6 +733,10 @@ The `full_flow` test suite (`crates/rok-core/tests/full_flow.rs`) covers:
 | `test_scope_based_binary_roundtrip` | Binary serialize/deserialize + decrypt with ancestor key |
 | `test_scope_based_proto_roundtrip` | Proto serialize/deserialize + decrypt with root key |
 | `test_scope_based_tamper_rejected` | Tampered ciphertext caught by signature verification |
+| `test_sectioned_finance_legal` | Sectioned envelope with `/finance` + `/legal`; root decrypts both, scoped keys decrypt only their section |
+| `test_sectioned_scope_based` | All sections scope-based; ancestor key decrypts accessible sections |
+| `test_sectioned_binary_proto_roundtrip` | Serialize sectioned envelope both ways (binary + proto), decrypt from restored |
+| `test_sectioned_mixed_algorithms` | One section classical, one hybrid; both decrypt correctly |
 
 ## Project Structure
 
@@ -586,6 +761,7 @@ read-only-keys/
     │   │   ├── sign.rs           # Ed25519 signing
     │   │   ├── encoding.rs       # Base58 with checksums
     │   │   ├── proto.rs          # Protobuf conversions
+    │   │   ├── sectioned.rs      # Sectioned envelope (multi-scope container)
     │   │   ├── keys/
     │   │   │   ├── spend.rs      # SpendKeyPair (Ed25519)
     │   │   │   ├── read.rs       # ReadKeyPair (X25519, hierarchical)
@@ -596,7 +772,9 @@ read-only-keys/
     ├── rok-pq/                   # Post-quantum module
     │   └── src/
     │       ├── kem.rs            # ML-KEM-768 wrapper
-    │       └── hybrid.rs         # X25519 + ML-KEM combiner
+    │       ├── hybrid.rs         # X25519 + ML-KEM combiner
+    │       ├── pq_derive.rs      # Deterministic PQ key derivation
+    │       └── envelope.rs       # Hybrid encrypt/decrypt envelopes
     ├── rok-sdk/                  # High-level SDK
     │   └── src/
     │       ├── vault.rs          # Encrypted document vault
@@ -612,6 +790,8 @@ read-only-keys/
             └── commands/
                 ├── encrypt.rs
                 ├── decrypt.rs
+                ├── encrypt_sections.rs  # Sectioned encrypt
+                ├── decrypt_sections.rs  # Sectioned decrypt
                 ├── sign.rs
                 ├── verify.rs
                 ├── inspect.rs

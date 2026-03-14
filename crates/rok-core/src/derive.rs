@@ -18,6 +18,9 @@ const DOMAIN_KEY_WRAP: &[u8] = b"rok-v1-key-wrap";
 /// Domain separation tag for hybrid X25519+ML-KEM secret combination.
 const DOMAIN_HYBRID_COMBINE: &[u8] = b"rok-v1-hybrid-combine";
 
+/// Domain separation tag for deriving PQ key seeds from read key secrets.
+const DOMAIN_PQ_KEY_DERIVE: &[u8] = b"rok-v1-pq-key-derive";
+
 /// Derive the root read key secret from a spend key secret.
 ///
 /// Uses HKDF-SHA256 with the spend secret as IKM,
@@ -81,10 +84,23 @@ pub(crate) fn derive_child_read_secret(
 /// Derive a wrapping key from an ECDH shared secret and a recipient's key ID.
 ///
 /// Used to wrap the per-envelope data key for a specific recipient.
-pub(crate) fn derive_wrapping_key(shared_secret: &[u8; 32], key_id: &KeyId) -> [u8; 32] {
+pub fn derive_wrapping_key(shared_secret: &[u8; 32], key_id: &KeyId) -> [u8; 32] {
     let hk = Hkdf::<Sha256>::new(Some(DOMAIN_KEY_WRAP), shared_secret);
     let mut output = [0u8; 32];
     hk.expand(key_id.as_bytes(), &mut output)
+        .expect("HKDF-SHA256 expand to 32 bytes should never fail");
+    output
+}
+
+/// Derive a seed for PQ key generation from a read key secret and scope.
+///
+/// The seed is deterministic: the same read secret + scope always produces
+/// the same PQ key seed, which can then be used to seed a CSPRNG for
+/// deterministic ML-KEM keypair generation.
+pub fn derive_pq_key_seed(read_secret: &[u8; 32], scope: &Scope) -> [u8; 32] {
+    let hk = Hkdf::<Sha256>::new(Some(DOMAIN_PQ_KEY_DERIVE), read_secret);
+    let mut output = [0u8; 32];
+    hk.expand(scope.as_str().as_bytes(), &mut output)
         .expect("HKDF-SHA256 expand to 32 bytes should never fail");
     output
 }

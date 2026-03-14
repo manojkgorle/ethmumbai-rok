@@ -19,6 +19,9 @@ use crate::error::{Result, RokError};
 use crate::keys::key_id::KeyId;
 use crate::keys::read::ExportedReadKey as NativeExportedReadKey;
 use crate::keys::scope::Scope;
+use crate::sectioned::{
+    Section as NativeSection, SectionedEnvelope as NativeSectionedEnvelope,
+};
 
 // --- Algorithm conversions ---
 
@@ -374,6 +377,58 @@ impl NativeEnvelope {
         let proto_env = rok::EncryptedEnvelope::decode(bytes)
             .map_err(|e| RokError::SerializationError(format!("protobuf decode: {}", e)))?;
         NativeEnvelope::try_from(&proto_env)
+    }
+}
+
+// --- SectionedSection conversions ---
+
+impl From<&NativeSection> for rok::SectionedSection {
+    fn from(section: &NativeSection) -> Self {
+        rok::SectionedSection {
+            name: section.name.clone(),
+            envelope: Some(rok::EncryptedEnvelope::from(&section.envelope)),
+        }
+    }
+}
+
+impl TryFrom<&rok::SectionedSection> for NativeSection {
+    type Error = RokError;
+
+    fn try_from(section: &rok::SectionedSection) -> Result<Self> {
+        let proto_env = section.envelope.as_ref().ok_or_else(|| {
+            RokError::SerializationError("sectioned section missing envelope".into())
+        })?;
+        let envelope = NativeEnvelope::try_from(proto_env)?;
+        Ok(NativeSection {
+            name: section.name.clone(),
+            envelope,
+        })
+    }
+}
+
+// --- SectionedEnvelope conversions ---
+
+impl From<&NativeSectionedEnvelope> for rok::SectionedEnvelope {
+    fn from(env: &NativeSectionedEnvelope) -> Self {
+        rok::SectionedEnvelope {
+            version: env.version,
+            sections: env.sections.iter().map(rok::SectionedSection::from).collect(),
+        }
+    }
+}
+
+impl TryFrom<&rok::SectionedEnvelope> for NativeSectionedEnvelope {
+    type Error = RokError;
+
+    fn try_from(env: &rok::SectionedEnvelope) -> Result<Self> {
+        let mut sections = Vec::with_capacity(env.sections.len());
+        for section in &env.sections {
+            sections.push(NativeSection::try_from(section)?);
+        }
+        Ok(NativeSectionedEnvelope {
+            version: env.version,
+            sections,
+        })
     }
 }
 

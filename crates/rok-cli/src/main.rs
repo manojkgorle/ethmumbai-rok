@@ -19,5 +19,7 @@ fn main() -> anyhow::Result<()> {
         Command::Revoke(args) => commands::revoke::run(args),
         Command::Inspect(args) => commands::inspect::run(args),
         Command::Keyring(args) => commands::keyring::run(args),
+        Command::EncryptSections(args) => commands::encrypt_sections::run(args),
+        Command::DecryptSections(args) => commands::decrypt_sections::run(args),
     }
 }

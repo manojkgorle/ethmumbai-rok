@@ -6,7 +6,7 @@ use rok_core::keys::key_id::KeyId;
 use rok_core::keys::scope::Scope;
 use rok_core::keys::spend::SpendKeyPair;
 
-use crate::cli::{EncryptArgs, Format};
+use crate::cli::{AlgorithmChoice, EncryptArgs, Format};
 
 pub fn run(args: EncryptArgs) -> anyhow::Result<()> {
     let seed_bytes = hex::decode(&args.spend_seed)?;
@@ -21,35 +21,47 @@ pub fn run(args: EncryptArgs) -> anyhow::Result<()> {
 
     // Read input file
     let plaintext = fs::read(&args.file)?;
-
-    // Encrypt
     let mut rng = rand::thread_rng();
-    let mut builder = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, scope);
-    builder.set_spend_key(&spend);
 
-    if args.scope_based {
-        builder.set_scope_based();
-    } else {
-        // Parse recipients
-        let mut recipients = Vec::new();
-        for encoded in &args.recipient {
-            let (public_key, _scope) = encoding::decode_read_public(encoded)?;
-            let key_id = KeyId::from_public_bytes(public_key.as_bytes());
-            recipients.push(Recipient {
-                read_public_key: public_key,
-                key_id,
-            });
+    let envelope = match args.algorithm {
+        AlgorithmChoice::Hybrid => {
+            // Hybrid mode: scope-based only
+            if !args.scope_based {
+                anyhow::bail!("hybrid algorithm requires --scope-based");
+            }
+            if !args.recipient.is_empty() {
+                anyhow::bail!("hybrid algorithm does not support --recipient (scope-based only)");
+            }
+            rok_pq::envelope::hybrid_encrypt(&plaintext, &scope, &spend, &mut rng)?
         }
+        AlgorithmChoice::Classical => {
+            let mut builder = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, scope);
+            builder.set_spend_key(&spend);
 
-        if recipients.is_empty() {
-            anyhow::bail!(
-                "at least one --recipient is required, or use --scope-based"
-            );
+            if args.scope_based {
+                builder.set_scope_based();
+            } else {
+                let mut recipients = Vec::new();
+                for encoded in &args.recipient {
+                    let (public_key, _scope) = encoding::decode_read_public(encoded)?;
+                    let key_id = KeyId::from_public_bytes(public_key.as_bytes());
+                    recipients.push(Recipient {
+                        read_public_key: public_key,
+                        key_id,
+                    });
+                }
+
+                if recipients.is_empty() {
+                    anyhow::bail!(
+                        "at least one --recipient is required, or use --scope-based"
+                    );
+                }
+                builder.add_recipients(&recipients);
+            }
+
+            builder.encrypt(&plaintext, &mut rng)?
         }
-        builder.add_recipients(&recipients);
-    }
-
-    let envelope = builder.encrypt(&plaintext, &mut rng)?;
+    };
 
     // Serialize
     let envelope_bytes = match args.format {
@@ -78,11 +90,16 @@ pub fn run(args: EncryptArgs) -> anyhow::Result<()> {
         rok_core::encrypt::AccessMode::Recipient => "per-recipient",
         rok_core::encrypt::AccessMode::ScopeBased => "scope-based",
     };
+    let algo_label = match envelope.algorithm {
+        Algorithm::EciesX25519ChaCha20 => "EciesX25519ChaCha20",
+        Algorithm::HybridX25519MlKemChaCha20 => "HybridX25519MlKemChaCha20",
+    };
     println!(
         "Encrypted {} -> {}",
         args.file.display(),
         output_path.display()
     );
+    println!("  Algorithm: {}", algo_label);
     println!("  Scope: {}", envelope.scope);
     println!("  Access mode: {}", mode_label);
     println!("  Recipients: {}", envelope.access_entries.len());

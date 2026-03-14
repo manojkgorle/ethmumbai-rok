@@ -105,6 +105,22 @@ pub struct EncryptedEnvelope {
     #[prost(enumeration = "AccessMode", tag = "12")]
     pub access_mode: i32,
 }
+/// / A named section within a sectioned envelope.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SectionedSection {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub envelope: ::core::option::Option<EncryptedEnvelope>,
+}
+/// / A container of multiple independently encrypted sections.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SectionedEnvelope {
+    #[prost(uint32, tag = "1")]
+    pub version: u32,
+    #[prost(message, repeated, tag = "2")]
+    pub sections: ::prost::alloc::vec::Vec<SectionedSection>,
+}
 /// / Access mode for encrypted envelopes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]

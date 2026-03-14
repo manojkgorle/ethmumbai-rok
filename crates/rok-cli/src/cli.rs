@@ -11,6 +11,16 @@ pub enum Format {
     Proto,
 }
 
+/// Encryption algorithm choice.
+#[derive(Debug, Clone, Copy, Default, ValueEnum)]
+pub enum AlgorithmChoice {
+    /// Classical: X25519 ECDH + ChaCha20-Poly1305
+    #[default]
+    Classical,
+    /// Hybrid post-quantum: X25519 + ML-KEM-768 + ChaCha20-Poly1305
+    Hybrid,
+}
+
 #[derive(Parser)]
 #[command(name = "rok", about = "Read-Only Keys cryptography toolkit")]
 #[command(version)]
@@ -41,6 +51,10 @@ pub enum Command {
     Inspect(InspectArgs),
     /// Keyring management: list, export, import, delete
     Keyring(KeyringArgs),
+    /// Encrypt multiple sections at different scopes into a single file
+    EncryptSections(EncryptSectionsArgs),
+    /// Decrypt accessible sections from a sectioned file
+    DecryptSections(DecryptSectionsArgs),
 }
 
 #[derive(clap::Args)]
@@ -90,6 +104,10 @@ pub struct EncryptArgs {
     /// Use scope-based group encryption (any ancestor key can decrypt)
     #[arg(long, default_value_t = false)]
     pub scope_based: bool,
+
+    /// Encryption algorithm
+    #[arg(long, value_enum, default_value_t = AlgorithmChoice::Classical)]
+    pub algorithm: AlgorithmChoice,
 }
 
 #[derive(clap::Args)]
@@ -246,4 +264,62 @@ pub struct KeyringDeleteArgs {
     /// Scope of the key (for derivation)
     #[arg(long)]
     pub scope: Option<String>,
+}
+
+#[derive(clap::Args)]
+pub struct EncryptSectionsArgs {
+    /// Section definitions: name:scope:file (repeatable)
+    #[arg(long = "section", conflicts_with = "manifest")]
+    pub sections: Vec<String>,
+
+    /// JSON manifest file listing sections
+    #[arg(long, conflicts_with = "sections")]
+    pub manifest: Option<PathBuf>,
+
+    /// Spend key seed (hex-encoded 32 bytes)
+    #[arg(long)]
+    pub spend_seed: String,
+
+    /// Use scope-based group encryption (default)
+    #[arg(long, default_value_t = true)]
+    pub scope_based: bool,
+
+    /// Encryption algorithm
+    #[arg(long, value_enum, default_value_t = AlgorithmChoice::Classical)]
+    pub algorithm: AlgorithmChoice,
+
+    /// Wire format for the output file
+    #[arg(long, value_enum, default_value_t = Format::Binary)]
+    pub format: Format,
+
+    /// Output file (defaults to output.roks)
+    #[arg(long)]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(clap::Args)]
+pub struct DecryptSectionsArgs {
+    /// Sectioned file to decrypt (.roks)
+    #[arg(long)]
+    pub file: PathBuf,
+
+    /// Exported read key (base58-encoded)
+    #[arg(long)]
+    pub key: String,
+
+    /// Spend public key (base58-encoded) for signature verification
+    #[arg(long)]
+    pub spend_public: String,
+
+    /// Output directory (created if needed, files named by section name)
+    #[arg(long)]
+    pub output_dir: Option<PathBuf>,
+
+    /// Wire format of the input file
+    #[arg(long, value_enum, default_value_t = Format::Binary)]
+    pub format: Format,
+
+    /// Only decrypt specific sections (repeatable; default: all accessible)
+    #[arg(long = "section")]
+    pub sections: Vec<String>,
 }

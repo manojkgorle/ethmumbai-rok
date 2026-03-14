@@ -16,6 +16,103 @@ use crate::keys::read::ReadKeyPair;
 use crate::keys::scope::Scope;
 use crate::keys::spend::SpendKeyPair;
 
+/// Encrypt plaintext with ChaCha20-Poly1305 using the given data key.
+///
+/// Returns `(ciphertext, nonce, tag)`.
+pub fn encrypt_payload(
+    data_key: &[u8; 32],
+    plaintext: &[u8],
+    rng: &mut impl CryptoRngCore,
+) -> Result<(Vec<u8>, [u8; 12], [u8; 16])> {
+    let mut nonce_bytes = [0u8; 12];
+    rng.fill_bytes(&mut nonce_bytes);
+
+    let cipher = ChaCha20Poly1305::new_from_slice(data_key)
+        .map_err(|e| RokError::EncryptionError(format!("ChaCha20 init: {}", e)))?;
+
+    let nonce = ChaChaNonce::from_slice(&nonce_bytes);
+    let encrypted = cipher
+        .encrypt(nonce, plaintext)
+        .map_err(|e| RokError::EncryptionError(format!("ChaCha20 encrypt: {}", e)))?;
+
+    // ChaCha20Poly1305 appends a 16-byte tag
+    let (ct, tag_bytes) = encrypted.split_at(encrypted.len() - 16);
+    let mut tag = [0u8; 16];
+    tag.copy_from_slice(tag_bytes);
+
+    Ok((ct.to_vec(), nonce_bytes, tag))
+}
+
+/// Decrypt ciphertext with ChaCha20-Poly1305 using the given data key.
+pub fn decrypt_payload(
+    data_key: &[u8],
+    ciphertext: &[u8],
+    nonce: &[u8; 12],
+    tag: &[u8; 16],
+) -> Result<Vec<u8>> {
+    let cipher = ChaCha20Poly1305::new_from_slice(data_key)
+        .map_err(|e| RokError::DecryptionError(format!("ChaCha20 init: {}", e)))?;
+
+    let mut authenticated = Vec::with_capacity(ciphertext.len() + 16);
+    authenticated.extend_from_slice(ciphertext);
+    authenticated.extend_from_slice(tag);
+
+    let n = ChaChaNonce::from_slice(nonce);
+    cipher
+        .decrypt(n, authenticated.as_ref())
+        .map_err(|_| RokError::DecryptionError("ciphertext authentication failed".into()))
+}
+
+/// Wrap a data key for a recipient using AES-256-GCM-SIV.
+///
+/// `shared_secret` is the raw ECDH (or hybrid) shared secret;
+/// a wrapping key is derived from it and the recipient's key ID.
+pub fn wrap_data_key(
+    data_key: &[u8; 32],
+    shared_secret: &[u8; 32],
+    key_id: &KeyId,
+    rng: &mut impl CryptoRngCore,
+) -> Result<AccessEntry> {
+    let wrapping_key = derive::derive_wrapping_key(shared_secret, key_id);
+
+    let mut wrap_nonce_bytes = [0u8; 12];
+    rng.fill_bytes(&mut wrap_nonce_bytes);
+
+    let wrap_cipher = Aes256GcmSiv::new_from_slice(&wrapping_key)
+        .map_err(|e| RokError::EncryptionError(format!("AES-GCM-SIV init: {}", e)))?;
+
+    let wrap_nonce = AesNonce::from_slice(&wrap_nonce_bytes);
+    let wrapped_data_key = wrap_cipher
+        .encrypt(wrap_nonce, data_key.as_ref())
+        .map_err(|e| RokError::EncryptionError(format!("key wrap: {}", e)))?;
+
+    Ok(AccessEntry {
+        read_key_id: *key_id,
+        wrapped_data_key,
+        wrap_nonce: wrap_nonce_bytes,
+    })
+}
+
+/// Unwrap a data key from an access entry using AES-256-GCM-SIV.
+///
+/// `shared_secret` is the raw ECDH (or hybrid) shared secret;
+/// a wrapping key is derived from it and the entry's key ID.
+pub fn unwrap_data_key(
+    entry: &AccessEntry,
+    shared_secret: &[u8; 32],
+    key_id: &KeyId,
+) -> Result<Vec<u8>> {
+    let wrapping_key = derive::derive_wrapping_key(shared_secret, key_id);
+
+    let wrap_cipher = Aes256GcmSiv::new_from_slice(&wrapping_key)
+        .map_err(|e| RokError::DecryptionError(format!("AES-GCM-SIV init: {}", e)))?;
+
+    let wrap_nonce = AesNonce::from_slice(&entry.wrap_nonce);
+    wrap_cipher
+        .decrypt(wrap_nonce, entry.wrapped_data_key.as_ref())
+        .map_err(|_| RokError::DecryptionError("failed to unwrap data key".into()))
+}
+
 /// Encryption algorithm selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -152,12 +249,6 @@ impl<'a> EncryptBuilder<'a> {
             recipients = self.recipients.clone();
         }
 
-        if self.algorithm == Algorithm::HybridX25519MlKemChaCha20 {
-            return Err(RokError::EncryptionError(
-                "hybrid mode not yet supported in EncryptBuilder; use rok-pq".into(),
-            ));
-        }
-
         // 1. Generate random 256-bit data key
         let mut data_key = [0u8; 32];
         rng.fill_bytes(&mut data_key);
@@ -169,52 +260,20 @@ impl<'a> EncryptBuilder<'a> {
         let ephemeral_public = X25519PublicKey::from(&ephemeral_static);
 
         // 3. Encrypt plaintext with ChaCha20-Poly1305
-        let mut nonce_bytes = [0u8; 12];
-        rng.fill_bytes(&mut nonce_bytes);
-
-        let cipher = ChaCha20Poly1305::new_from_slice(&data_key)
-            .map_err(|e| RokError::EncryptionError(format!("ChaCha20 init: {}", e)))?;
-
-        let nonce = ChaChaNonce::from_slice(&nonce_bytes);
-        let encrypted = cipher
-            .encrypt(nonce, plaintext)
-            .map_err(|e| RokError::EncryptionError(format!("ChaCha20 encrypt: {}", e)))?;
-
-        // ChaCha20Poly1305 appends a 16-byte tag
-        let (ciphertext, tag_bytes) = encrypted.split_at(encrypted.len() - 16);
-        let ciphertext = ciphertext.to_vec();
-        let mut tag = [0u8; 16];
-        tag.copy_from_slice(tag_bytes);
+        let (ciphertext, nonce_bytes, tag) = encrypt_payload(&data_key, plaintext, rng)?;
 
         // 4. For each recipient, wrap the data key
         let mut access_entries = Vec::with_capacity(recipients.len());
 
         for recipient in &recipients {
             let shared_secret = ephemeral_static.diffie_hellman(&recipient.read_public_key);
-
-            // Derive wrapping key
             let mut shared_bytes = [0u8; 32];
             shared_bytes.copy_from_slice(shared_secret.as_bytes());
-            let wrapping_key = derive::derive_wrapping_key(&shared_bytes, &recipient.key_id);
+
+            let entry = wrap_data_key(&data_key, &shared_bytes, &recipient.key_id, rng)?;
             shared_bytes.zeroize();
 
-            // Wrap data key with AES-256-GCM-SIV
-            let mut wrap_nonce_bytes = [0u8; 12];
-            rng.fill_bytes(&mut wrap_nonce_bytes);
-
-            let wrap_cipher = Aes256GcmSiv::new_from_slice(&wrapping_key)
-                .map_err(|e| RokError::EncryptionError(format!("AES-GCM-SIV init: {}", e)))?;
-
-            let wrap_nonce = AesNonce::from_slice(&wrap_nonce_bytes);
-            let wrapped_data_key = wrap_cipher
-                .encrypt(wrap_nonce, data_key.as_ref())
-                .map_err(|e| RokError::EncryptionError(format!("key wrap: {}", e)))?;
-
-            access_entries.push(AccessEntry {
-                read_key_id: recipient.key_id,
-                wrapped_data_key,
-                wrap_nonce: wrap_nonce_bytes,
-            });
+            access_entries.push(entry);
         }
 
         ephemeral_secret_bytes.zeroize();
@@ -292,34 +351,14 @@ pub fn decrypt(
     let mut shared_bytes = [0u8; 32];
     shared_bytes.copy_from_slice(shared_secret.as_bytes());
 
-    // 6. Derive wrapping key
-    let wrapping_key = derive::derive_wrapping_key(&shared_bytes, &my_key_id);
-    shared_bytes.zeroize();
-
     drop(derived);
 
-    // 7. Unwrap data key
-    let wrap_cipher = Aes256GcmSiv::new_from_slice(&wrapping_key)
-        .map_err(|e| RokError::DecryptionError(format!("AES-GCM-SIV init: {}", e)))?;
+    // 6. Unwrap data key
+    let mut data_key = unwrap_data_key(entry, &shared_bytes, &my_key_id)?;
+    shared_bytes.zeroize();
 
-    let wrap_nonce = AesNonce::from_slice(&entry.wrap_nonce);
-    let mut data_key = wrap_cipher
-        .decrypt(wrap_nonce, entry.wrapped_data_key.as_ref())
-        .map_err(|_| RokError::DecryptionError("failed to unwrap data key".into()))?;
-
-    // 8. Decrypt ciphertext
-    let cipher = ChaCha20Poly1305::new_from_slice(&data_key)
-        .map_err(|e| RokError::DecryptionError(format!("ChaCha20 init: {}", e)))?;
-
-    // Reconstruct the authenticated ciphertext (ciphertext + tag)
-    let mut authenticated = Vec::with_capacity(envelope.ciphertext.len() + 16);
-    authenticated.extend_from_slice(&envelope.ciphertext);
-    authenticated.extend_from_slice(&envelope.tag);
-
-    let nonce = ChaChaNonce::from_slice(&envelope.nonce);
-    let plaintext = cipher
-        .decrypt(nonce, authenticated.as_ref())
-        .map_err(|_| RokError::DecryptionError("ciphertext authentication failed".into()))?;
+    // 7. Decrypt ciphertext
+    let plaintext = decrypt_payload(&data_key, &envelope.ciphertext, &envelope.nonce, &envelope.tag)?;
 
     data_key.zeroize();
 

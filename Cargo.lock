@@ -836,6 +836,7 @@ dependencies = [
  "prost-build",
  "rand",
  "rand_core",
+ "rok-pq",
  "serde",
  "sha2",
  "subtle",
@@ -848,8 +849,10 @@ dependencies = [
 name = "rok-pq"
 version = "0.1.0"
 dependencies = [
+ "ed25519-dalek",
  "ml-kem",
  "rand",
+ "rand_chacha",
  "rand_core",
  "rok-core",
  "thiserror",

@@ -6,4 +6,5 @@ pub mod error;
 pub mod keyring;
 pub mod keys;
 pub mod proto;
+pub mod sectioned;
 pub mod sign;

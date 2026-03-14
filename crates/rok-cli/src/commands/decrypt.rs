@@ -1,7 +1,7 @@
 use std::fs;
 
 use rok_core::encoding;
-use rok_core::encrypt;
+use rok_core::encrypt::{self, Algorithm};
 use rok_core::envelope::EncryptedEnvelope;
 use rok_core::keys::read::ReadKeyPair;
 
@@ -22,8 +22,15 @@ pub fn run(args: DecryptArgs) -> anyhow::Result<()> {
         Format::Proto => EncryptedEnvelope::from_proto_bytes(&envelope_bytes)?,
     };
 
-    // Decrypt
-    let plaintext = encrypt::decrypt(&envelope, &read_key, &spend_vk)?;
+    // Decrypt — auto-detect algorithm from envelope
+    let plaintext = match envelope.algorithm {
+        Algorithm::HybridX25519MlKemChaCha20 => {
+            rok_pq::envelope::hybrid_decrypt(&envelope, &read_key, &spend_vk)?
+        }
+        Algorithm::EciesX25519ChaCha20 => {
+            encrypt::decrypt(&envelope, &read_key, &spend_vk)?
+        }
+    };
 
     // Write output
     let output_path = args.output.unwrap_or_else(|| {
@@ -43,11 +50,16 @@ pub fn run(args: DecryptArgs) -> anyhow::Result<()> {
 
     fs::write(&output_path, &plaintext)?;
 
+    let algo_label = match envelope.algorithm {
+        Algorithm::EciesX25519ChaCha20 => "EciesX25519ChaCha20",
+        Algorithm::HybridX25519MlKemChaCha20 => "HybridX25519MlKemChaCha20",
+    };
     println!(
         "Decrypted {} -> {}",
         args.file.display(),
         output_path.display()
     );
+    println!("  Algorithm: {}", algo_label);
     println!("  Scope: {}", envelope.scope);
     println!("  Size: {} bytes", plaintext.len());
 
