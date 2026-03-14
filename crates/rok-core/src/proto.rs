@@ -19,9 +19,7 @@ use crate::error::{Result, RokError};
 use crate::keys::key_id::KeyId;
 use crate::keys::read::ExportedReadKey as NativeExportedReadKey;
 use crate::keys::scope::Scope;
-use crate::sectioned::{
-    Section as NativeSection, SectionedEnvelope as NativeSectionedEnvelope,
-};
+use crate::sectioned::{Section as NativeSection, SectionedEnvelope as NativeSectionedEnvelope};
 
 // --- Algorithm conversions ---
 
@@ -412,7 +410,11 @@ impl From<&NativeSectionedEnvelope> for rok::SectionedEnvelope {
     fn from(env: &NativeSectionedEnvelope) -> Self {
         rok::SectionedEnvelope {
             version: env.version,
-            sections: env.sections.iter().map(rok::SectionedSection::from).collect(),
+            sections: env
+                .sections
+                .iter()
+                .map(rok::SectionedSection::from)
+                .collect(),
         }
     }
 }

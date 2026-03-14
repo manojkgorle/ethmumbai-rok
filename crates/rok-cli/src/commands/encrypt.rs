@@ -52,9 +52,7 @@ pub fn run(args: EncryptArgs) -> anyhow::Result<()> {
                 }
 
                 if recipients.is_empty() {
-                    anyhow::bail!(
-                        "at least one --recipient is required, or use --scope-based"
-                    );
+                    anyhow::bail!("at least one --recipient is required, or use --scope-based");
                 }
                 builder.add_recipients(&recipients);
             }

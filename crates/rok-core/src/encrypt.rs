@@ -358,7 +358,12 @@ pub fn decrypt(
     shared_bytes.zeroize();
 
     // 7. Decrypt ciphertext
-    let plaintext = decrypt_payload(&data_key, &envelope.ciphertext, &envelope.nonce, &envelope.tag)?;
+    let plaintext = decrypt_payload(
+        &data_key,
+        &envelope.ciphertext,
+        &envelope.nonce,
+        &envelope.tag,
+    )?;
 
     data_key.zeroize();
 

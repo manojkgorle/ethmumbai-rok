@@ -4,7 +4,7 @@ use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 use zeroize::Zeroize;
 
 use rok_core::encrypt::{
-    AccessMode, Algorithm, encrypt_payload, decrypt_payload, wrap_data_key, unwrap_data_key,
+    decrypt_payload, encrypt_payload, unwrap_data_key, wrap_data_key, AccessMode, Algorithm,
 };
 use rok_core::envelope::EncryptedEnvelope;
 use rok_core::error::{Result, RokError};
@@ -147,9 +147,12 @@ pub fn hybrid_decrypt(
     let pq_keypair = derive_pq_keypair(&read_secret, &envelope.scope);
 
     // 6. Get ML-KEM ciphertext
-    let mlkem_ct = envelope.ephemeral_mlkem_ciphertext.as_ref().ok_or_else(|| {
-        RokError::DecryptionError("hybrid envelope missing ML-KEM ciphertext".into())
-    })?;
+    let mlkem_ct = envelope
+        .ephemeral_mlkem_ciphertext
+        .as_ref()
+        .ok_or_else(|| {
+            RokError::DecryptionError("hybrid envelope missing ML-KEM ciphertext".into())
+        })?;
 
     // 7. Hybrid decapsulate → combined secret
     let ephemeral_public = X25519PublicKey::from(envelope.ephemeral_x25519_public);
@@ -166,7 +169,12 @@ pub fn hybrid_decrypt(
     let mut data_key = unwrap_data_key(entry, &combined_secret, &my_key_id)?;
 
     // 9. Decrypt payload
-    let plaintext = decrypt_payload(&data_key, &envelope.ciphertext, &envelope.nonce, &envelope.tag)?;
+    let plaintext = decrypt_payload(
+        &data_key,
+        &envelope.ciphertext,
+        &envelope.nonce,
+        &envelope.tag,
+    )?;
 
     data_key.zeroize();
 

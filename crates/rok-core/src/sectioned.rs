@@ -128,8 +128,7 @@ impl SectionedEnvelope {
         }
 
         // Version
-        let version =
-            u32::from_le_bytes(read_bytes(&mut pos, 4)?.try_into().unwrap());
+        let version = u32::from_le_bytes(read_bytes(&mut pos, 4)?.try_into().unwrap());
 
         // Section count
         let section_count =
@@ -222,7 +221,12 @@ mod tests {
     use crate::keys::scope::Scope;
     use crate::keys::spend::SpendKeyPair;
 
-    fn make_test_section(spend: &SpendKeyPair, name: &str, scope_str: &str, data: &[u8]) -> Section {
+    fn make_test_section(
+        spend: &SpendKeyPair,
+        name: &str,
+        scope_str: &str,
+        data: &[u8],
+    ) -> Section {
         let mut rng = rand::thread_rng();
         let scope = Scope::new(scope_str).unwrap();
         let envelope = EncryptBuilder::new(Algorithm::EciesX25519ChaCha20, scope)
@@ -243,8 +247,12 @@ mod tests {
         let s2 = make_test_section(&spend, "legal", "/legal", b"legal data");
 
         let mut builder = SectionedEnvelopeBuilder::new();
-        builder.add_section(s1.name.clone(), s1.envelope.clone()).unwrap();
-        builder.add_section(s2.name.clone(), s2.envelope.clone()).unwrap();
+        builder
+            .add_section(s1.name.clone(), s1.envelope.clone())
+            .unwrap();
+        builder
+            .add_section(s2.name.clone(), s2.envelope.clone())
+            .unwrap();
         let sectioned = builder.build().unwrap();
 
         let bytes = sectioned.to_bytes();
@@ -265,8 +273,12 @@ mod tests {
         let s2 = make_test_section(&spend, "legal", "/legal", b"legal data");
 
         let mut builder = SectionedEnvelopeBuilder::new();
-        builder.add_section(s1.name.clone(), s1.envelope.clone()).unwrap();
-        builder.add_section(s2.name.clone(), s2.envelope.clone()).unwrap();
+        builder
+            .add_section(s1.name.clone(), s1.envelope.clone())
+            .unwrap();
+        builder
+            .add_section(s2.name.clone(), s2.envelope.clone())
+            .unwrap();
         let sectioned = builder.build().unwrap();
 
         let bytes = sectioned.to_proto_bytes();

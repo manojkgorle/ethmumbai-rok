@@ -612,9 +612,7 @@ fn test_sectioned_finance_legal() {
     builder
         .add_section("finance".into(), finance_envelope)
         .unwrap();
-    builder
-        .add_section("legal".into(), legal_envelope)
-        .unwrap();
+    builder.add_section("legal".into(), legal_envelope).unwrap();
     let sectioned = builder.build().unwrap();
 
     assert_eq!(sectioned.sections.len(), 2);

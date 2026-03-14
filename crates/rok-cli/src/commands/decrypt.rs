@@ -27,9 +27,7 @@ pub fn run(args: DecryptArgs) -> anyhow::Result<()> {
         Algorithm::HybridX25519MlKemChaCha20 => {
             rok_pq::envelope::hybrid_decrypt(&envelope, &read_key, &spend_vk)?
         }
-        Algorithm::EciesX25519ChaCha20 => {
-            encrypt::decrypt(&envelope, &read_key, &spend_vk)?
-        }
+        Algorithm::EciesX25519ChaCha20 => encrypt::decrypt(&envelope, &read_key, &spend_vk)?,
     };
 
     // Write output

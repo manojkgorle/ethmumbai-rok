@@ -56,7 +56,10 @@ fn parse_markdown(input: &str) -> Vec<MarkdownSection> {
                 if let Some(scope_end) = after.find("-->") {
                     current_scope = after[..scope_end].trim().to_string();
                 }
-                current_name = line[..scope_start].trim_start_matches('#').trim().to_string();
+                current_name = line[..scope_start]
+                    .trim_start_matches('#')
+                    .trim()
+                    .to_string();
             } else {
                 current_name = line.trim_start_matches('#').trim().to_string();
                 current_scope = "/".to_string();
@@ -107,7 +110,12 @@ Next milestone: v2.0 launch in Q3.
     let sections = parse_markdown(document);
     println!("Parsed {} sections from markdown:\n", sections.len());
     for s in &sections {
-        println!("  [{}] scope={} ({} bytes)", s.name, s.scope, s.content.len());
+        println!(
+            "  [{}] scope={} ({} bytes)",
+            s.name,
+            s.scope,
+            s.content.len()
+        );
     }
 
     // --- Step 2: Encrypt each section with its scope ---
@@ -127,7 +135,10 @@ Next milestone: v2.0 launch in Q3.
     let sectioned = builder.build().unwrap();
 
     let bytes = sectioned.to_bytes();
-    println!("\nEncrypted sectioned envelope: {} bytes total", bytes.len());
+    println!(
+        "\nEncrypted sectioned envelope: {} bytes total",
+        bytes.len()
+    );
 
     // --- Step 3: Derive keys for different roles ---
     let root_read = spend.derive_root_read_key();
@@ -136,9 +147,7 @@ Next milestone: v2.0 launch in Q3.
     let engineering_key = root_read.derive_child_segment("engineering").unwrap();
 
     // Derive a /finance/detailed key BEFORE encryption exists
-    let pre_finance_detailed = finance_key
-        .derive_child_segment("detailed")
-        .unwrap();
+    let pre_finance_detailed = finance_key.derive_child_segment("detailed").unwrap();
     println!(
         "\nPre-encryption /finance/detailed key:  key_id={}",
         pre_finance_detailed.key_id()
