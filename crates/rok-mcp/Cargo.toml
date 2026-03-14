@@ -1,0 +1,38 @@
+[package]
+name = "rok-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "MCP server for encrypted hierarchical memory backed by Fileverse"
+
+[[bin]]
+name = "rok-mcp"
+path = "src/main.rs"
+
+[dependencies]
+rok-core = { path = "../rok-core" }
+rok-sdk = { path = "../rok-sdk", features = ["fileverse"] }
+
+# MCP server
+rmcp = { version = "0.1", features = ["server", "transport-io"] }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization & schema
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = "0.8"
+
+# Error handling & logging
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Crypto deps (for key loading)
+ed25519-dalek = { workspace = true }
+rand = { workspace = true }
+hex = "0.4"
+zeroize = { workspace = true }

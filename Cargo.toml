@@ -5,6 +5,7 @@ members = [
     "crates/rok-pq",
     "crates/rok-sdk",
     "crates/rok-cli",
+    "crates/rok-mcp",
 ]
 
 [workspace.package]
