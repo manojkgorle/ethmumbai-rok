@@ -55,6 +55,8 @@ pub enum Command {
     EncryptSections(EncryptSectionsArgs),
     /// Decrypt accessible sections from a sectioned file
     DecryptSections(DecryptSectionsArgs),
+    /// Encrypted agent memory operations (backed by Fileverse)
+    Memory(MemoryArgs),
 }
 
 #[derive(clap::Args)]
@@ -322,4 +324,127 @@ pub struct DecryptSectionsArgs {
     /// Only decrypt specific sections (repeatable; default: all accessible)
     #[arg(long = "section")]
     pub sections: Vec<String>,
+}
+
+#[derive(clap::Args)]
+pub struct MemoryArgs {
+    #[command(subcommand)]
+    pub action: MemoryAction,
+
+    /// Fileverse API URL
+    #[arg(long, default_value = "http://127.0.0.1:8001", global = true)]
+    pub fileverse_url: String,
+
+    /// Fileverse API key (or set FILEVERSE_API_KEY env var)
+    #[arg(long, env = "FILEVERSE_API_KEY", global = true, default_value = "")]
+    pub api_key: String,
+}
+
+#[derive(Subcommand)]
+pub enum MemoryAction {
+    /// Write (encrypt + store) a memory at a scope
+    Write(MemoryWriteArgs),
+    /// Read (fetch + decrypt) a memory with a scoped read key
+    Read(MemoryReadArgs),
+    /// List all memories visible to a scoped read key
+    List(MemoryListArgs),
+    /// Grant a scoped read key for an agent
+    Grant(MemoryGrantArgs),
+    /// Accept a proposed memory from an agent (encrypt + store)
+    Propose(MemoryProposeArgs),
+}
+
+#[derive(clap::Args)]
+pub struct MemoryWriteArgs {
+    /// Scope path (e.g. /finance/q1)
+    #[arg(long)]
+    pub scope: String,
+
+    /// Memory key/name
+    #[arg(long)]
+    pub key: String,
+
+    /// Spend key seed (hex-encoded 32 bytes)
+    #[arg(long)]
+    pub spend_seed: String,
+
+    /// Memory content as string
+    #[arg(long)]
+    pub data: Option<String>,
+
+    /// Read content from file instead
+    #[arg(long)]
+    pub file: Option<PathBuf>,
+}
+
+#[derive(clap::Args)]
+pub struct MemoryReadArgs {
+    /// Scope of the memory to read
+    #[arg(long)]
+    pub scope: String,
+
+    /// Memory key/name
+    #[arg(long)]
+    pub name: String,
+
+    /// Exported read key (base58-encoded)
+    #[arg(long)]
+    pub key: String,
+
+    /// Spend public key (base58-encoded) for signature verification
+    #[arg(long)]
+    pub spend_public: String,
+
+    /// Output file path (write decrypted content to file instead of stdout)
+    #[arg(long)]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(clap::Args)]
+pub struct MemoryListArgs {
+    /// Exported read key (base58-encoded)
+    #[arg(long)]
+    pub key: String,
+
+    /// Spend public key (base58-encoded) for signature verification
+    #[arg(long)]
+    pub spend_public: String,
+}
+
+#[derive(clap::Args)]
+pub struct MemoryGrantArgs {
+    /// Scope to grant access to
+    #[arg(long)]
+    pub scope: String,
+
+    /// Spend key seed (hex-encoded 32 bytes)
+    #[arg(long)]
+    pub spend_seed: String,
+}
+
+#[derive(clap::Args)]
+pub struct MemoryProposeArgs {
+    /// Scope for the proposed memory
+    #[arg(long)]
+    pub scope: String,
+
+    /// Memory key/name
+    #[arg(long)]
+    pub key: String,
+
+    /// Agent identifier
+    #[arg(long)]
+    pub agent_id: String,
+
+    /// Spend key seed (hex-encoded, owner approves by providing this)
+    #[arg(long)]
+    pub spend_seed: String,
+
+    /// Content as string
+    #[arg(long)]
+    pub data: Option<String>,
+
+    /// Read content from file
+    #[arg(long)]
+    pub file: Option<PathBuf>,
 }

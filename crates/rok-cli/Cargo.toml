@@ -13,8 +13,8 @@ path = "src/main.rs"
 [dependencies]
 rok-core = { path = "../rok-core" }
 rok-pq = { path = "../rok-pq" }
-rok-sdk = { path = "../rok-sdk" }
-clap = { workspace = true }
+rok-sdk = { path = "../rok-sdk", features = ["fileverse"] }
+clap = { workspace = true, features = ["env"] }
 anyhow = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }

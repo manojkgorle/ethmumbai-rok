@@ -1,0 +1,1 @@
+Evaluated post-quantum migration path: ML-KEM-768 performs well under load testing, latency overhead ~2ms per encapsulation on M-series chips. Recommend as default for all new envelope encryption.

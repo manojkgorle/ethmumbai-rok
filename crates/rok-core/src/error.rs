@@ -44,6 +44,9 @@ pub enum RokError {
     #[error("invalid checksum")]
     InvalidChecksum,
 
+    #[error("storage error: {0}")]
+    StorageError(String),
+
     #[error("invalid type tag: expected {expected}, got {got}")]
     InvalidTypeTag { expected: u8, got: u8 },
 }

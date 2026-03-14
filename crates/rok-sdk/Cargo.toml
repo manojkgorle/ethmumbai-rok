@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 description = "High-level SDK for Read-Only Keys: vault, pipeline, identity abstractions"
 
+[features]
+default = []
+fileverse = ["reqwest", "base64"]
+
 [dependencies]
 rok-core = { path = "../rok-core" }
 rok-pq = { path = "../rok-pq" }
@@ -17,3 +21,5 @@ zeroize = { workspace = true }
 rand = { workspace = true }
 rand_core = { workspace = true }
 tracing = { workspace = true }
+reqwest = { version = "0.12", features = ["blocking", "json"], optional = true }
+base64 = { version = "0.22", optional = true }

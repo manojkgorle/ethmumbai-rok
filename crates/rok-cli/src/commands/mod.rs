@@ -7,6 +7,7 @@ pub mod grant;
 pub mod inspect;
 pub mod keygen;
 pub mod keyring;
+pub mod memory;
 pub mod revoke;
 pub mod sign;
 pub mod verify;
