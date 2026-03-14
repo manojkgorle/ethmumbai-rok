@@ -13,7 +13,7 @@ use rok_core::keys::scope::Scope;
 use rok_sdk::memory::Proposal;
 
 use crate::resources;
-use crate::session::{Role, Session};
+use crate::session::{Role, Session, SessionConfig};
 
 // ---------------------------------------------------------------------------
 // Tool parameter types
@@ -46,6 +46,27 @@ fn default_fileverse_url() -> String {
 
 fn default_scope() -> String {
     "/".to_string()
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct SetupParams {
+    /// Fileverse API key.
+    pub api_key: String,
+    /// Fileverse server URL (default: http://127.0.0.1:8001).
+    #[serde(default = "default_fileverse_url")]
+    pub fileverse_url: String,
+    /// Hex-encoded 32-byte spend seed (for owner mode).
+    #[serde(default)]
+    pub spend_seed: Option<String>,
+    /// Base58-encoded exported read key (for agent mode).
+    #[serde(default)]
+    pub read_key: Option<String>,
+    /// Base58-encoded spend public key (for agent mode).
+    #[serde(default)]
+    pub spend_public: Option<String>,
+    /// Automatically load memories into context on session start.
+    #[serde(default)]
+    pub auto_load: Option<bool>,
 }
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -96,6 +117,7 @@ fn default_agent_id() -> String {
 #[derive(Clone)]
 pub struct RokService {
     session: Arc<RwLock<Option<Session>>>,
+    auto_load: bool,
 }
 
 impl RokService {
@@ -103,19 +125,24 @@ impl RokService {
     pub fn new() -> Self {
         Self {
             session: Arc::new(RwLock::new(None)),
+            auto_load: false,
         }
     }
 
-    /// Create a service with optional pre-loaded config from ~/.rok/session.json.
-    /// If config contains valid credentials, bootstraps a session automatically.
-    pub fn new_with_config(config: Option<crate::session::SessionConfig>) -> Self {
-        let session = config.and_then(|cfg| Self::session_from_config(cfg));
+    pub fn new_with_config(config: Option<SessionConfig>) -> Self {
+        let auto_load = config
+            .as_ref()
+            .and_then(|c| c.auto_load)
+            .unwrap_or(false);
+        let session = config.and_then(|cfg| Self::build_session_from_config(cfg));
+        let has_session = session.is_some();
         Self {
             session: Arc::new(RwLock::new(session)),
+            auto_load: auto_load && has_session,
         }
     }
 
-    fn session_from_config(cfg: crate::session::SessionConfig) -> Option<Session> {
+    pub fn build_session_from_config(cfg: SessionConfig) -> Option<Session> {
         let url = cfg
             .fileverse_url
             .unwrap_or_else(|| "http://127.0.0.1:8001".to_string());
@@ -147,8 +174,78 @@ impl RokService {
 
 #[tool(tool_box)]
 impl RokService {
-    #[tool(description = "Authenticate and start a rok memory session. Provide either spend_seed (owner: full read/write/grant) or read_key + spend_public (agent: read-only).")]
-    async fn rok_login(
+    #[tool(name = "rok_memory:setup", description = "Configure rok-memory credentials. Writes ~/.rok/session.json and starts a session. Run this once to set up the plugin.")]
+    async fn setup(
+        &self,
+        #[tool(aggr)] params: SetupParams,
+    ) -> Result<CallToolResult, McpError> {
+        // Build and validate the config
+        let config = SessionConfig {
+            api_key: Some(params.api_key.clone()),
+            fileverse_url: Some(params.fileverse_url.clone()),
+            spend_seed: params.spend_seed.clone(),
+            read_key: params.read_key.clone(),
+            spend_public: params.spend_public.clone(),
+            auto_load: params.auto_load,
+        };
+
+        // Validate credentials by building a session
+        let session = Self::build_session_from_config(config.clone())
+            .ok_or_else(|| {
+                McpError::invalid_params(
+                    "invalid credentials: provide spend_seed (owner) or read_key + spend_public (agent)",
+                    None,
+                )
+            })?;
+
+        // Write config to ~/.rok/session.json
+        let home = std::env::var("HOME")
+            .map_err(|_| McpError::internal_error("HOME not set", None))?;
+        let rok_dir = std::path::Path::new(&home).join(".rok");
+        std::fs::create_dir_all(&rok_dir)
+            .map_err(|e| McpError::internal_error(format!("mkdir failed: {e}"), None))?;
+
+        let config_path = rok_dir.join("session.json");
+        let json = serde_json::to_string_pretty(&config)
+            .map_err(|e| McpError::internal_error(format!("json error: {e}"), None))?;
+        std::fs::write(&config_path, &json)
+            .map_err(|e| McpError::internal_error(format!("write failed: {e}"), None))?;
+
+        // chmod 600
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::Permissions::from_mode(0o600);
+            let _ = std::fs::set_permissions(&config_path, perms);
+        }
+
+        // Add rok-memory permissions to .claude/settings.local.json
+        ensure_permissions()
+            .map_err(|e| McpError::internal_error(format!("permissions setup: {e}"), None))?;
+
+        // Activate the session
+        let role = session.role;
+        let count = Self::count_memories(&session)
+            .map_err(|e| McpError::internal_error(format!("connect failed: {e}"), None))?;
+
+        let mut guard = self.session.write().await;
+        let mut session = session;
+        session.memory_count = count;
+        *guard = Some(session);
+
+        let auto_str = if params.auto_load.unwrap_or(false) {
+            "\n  auto_load: true (memories load on conversation start)"
+        } else {
+            ""
+        };
+
+        Self::ok(format!(
+            "rok-memory configured\n  config: ~/.rok/session.json\n  permissions: .claude/settings.local.json\n  role: {role}\n  memories: {count}{auto_str}"
+        ))
+    }
+
+    #[tool(name = "rok_memory:login", description = "Authenticate and start a rok memory session. Provide either spend_seed (owner) or read_key + spend_public (agent).")]
+    async fn login(
         &self,
         #[tool(aggr)] params: LoginParams,
     ) -> Result<CallToolResult, McpError> {
@@ -160,10 +257,7 @@ impl RokService {
                 .map_err(|e| McpError::invalid_params(format!("invalid hex: {e}"), None))?;
             if seed_bytes.len() != 32 {
                 return Err(McpError::invalid_params(
-                    format!(
-                        "spend seed must be 32 bytes (64 hex chars), got {}",
-                        seed_bytes.len()
-                    ),
+                    format!("spend seed must be 32 bytes (64 hex chars), got {}", seed_bytes.len()),
                     None,
                 ));
             }
@@ -199,8 +293,8 @@ impl RokService {
         ))
     }
 
-    #[tool(description = "End the rok memory session and clear credentials")]
-    async fn rok_logout(&self) -> Result<CallToolResult, McpError> {
+    #[tool(name = "rok_memory:logout", description = "End the rok memory session and clear credentials")]
+    async fn logout(&self) -> Result<CallToolResult, McpError> {
         let mut guard = self.session.write().await;
         if guard.is_none() {
             return Err(McpError::invalid_params("no active session", None));
@@ -209,12 +303,12 @@ impl RokService {
         Self::ok("rok session ended, credentials cleared")
     }
 
-    #[tool(description = "List all accessible encrypted memories")]
-    async fn rok_list(&self) -> Result<CallToolResult, McpError> {
+    #[tool(name = "rok_memory:list", description = "List all accessible encrypted memories")]
+    async fn list(&self) -> Result<CallToolResult, McpError> {
         let guard = self.session.read().await;
         let session = guard
             .as_ref()
-            .ok_or_else(|| McpError::invalid_params("no active session — call rok_login first", None))?;
+            .ok_or_else(|| McpError::invalid_params("no active session — call rok_memory:login first", None))?;
 
         let reader = session
             .memory_reader()
@@ -244,15 +338,15 @@ impl RokService {
         Self::ok(lines.join("\n"))
     }
 
-    #[tool(description = "Read and decrypt a memory by scope and key")]
-    async fn rok_read(
+    #[tool(name = "rok_memory:read", description = "Read and decrypt a memory by scope and key")]
+    async fn read(
         &self,
         #[tool(aggr)] params: ReadParams,
     ) -> Result<CallToolResult, McpError> {
         let guard = self.session.read().await;
         let session = guard
             .as_ref()
-            .ok_or_else(|| McpError::invalid_params("no active session — call rok_login first", None))?;
+            .ok_or_else(|| McpError::invalid_params("no active session — call rok_memory:login first", None))?;
 
         let scope = Scope::new(&params.scope)
             .map_err(|e| McpError::invalid_params(format!("invalid scope: {e}"), None))?;
@@ -271,19 +365,19 @@ impl RokService {
         Self::ok(String::from_utf8_lossy(&data))
     }
 
-    #[tool(description = "Encrypt and store a memory (owner only)")]
-    async fn rok_write(
+    #[tool(name = "rok_memory:write", description = "Encrypt and store a memory (owner only)")]
+    async fn write(
         &self,
         #[tool(aggr)] params: WriteParams,
     ) -> Result<CallToolResult, McpError> {
         let guard = self.session.read().await;
         let session = guard
             .as_ref()
-            .ok_or_else(|| McpError::invalid_params("no active session — call rok_login first", None))?;
+            .ok_or_else(|| McpError::invalid_params("no active session — call rok_memory:login first", None))?;
 
         if session.role != Role::Owner {
             return Err(McpError::invalid_params(
-                "write requires owner role — use rok_propose to stage changes as agent",
+                "write requires owner role — use rok_memory:propose to stage changes as agent",
                 None,
             ));
         }
@@ -307,15 +401,15 @@ impl RokService {
         ))
     }
 
-    #[tool(description = "Grant read access to a scope by exporting a scoped key (owner only)")]
-    async fn rok_grant(
+    #[tool(name = "rok_memory:grant", description = "Grant read access to a scope by exporting a scoped key (owner only)")]
+    async fn grant(
         &self,
         #[tool(aggr)] params: GrantParams,
     ) -> Result<CallToolResult, McpError> {
         let guard = self.session.read().await;
         let session = guard
             .as_ref()
-            .ok_or_else(|| McpError::invalid_params("no active session — call rok_login first", None))?;
+            .ok_or_else(|| McpError::invalid_params("no active session — call rok_memory:login first", None))?;
 
         if session.role != Role::Owner {
             return Err(McpError::invalid_params(
@@ -350,15 +444,15 @@ impl RokService {
         ))
     }
 
-    #[tool(description = "Propose a memory write (agent) or accept a proposal (owner)")]
-    async fn rok_propose(
+    #[tool(name = "rok_memory:propose", description = "Propose a memory write (agent) or accept a proposal (owner)")]
+    async fn propose(
         &self,
         #[tool(aggr)] params: ProposeParams,
     ) -> Result<CallToolResult, McpError> {
         let guard = self.session.read().await;
         let session = guard
             .as_ref()
-            .ok_or_else(|| McpError::invalid_params("no active session — call rok_login first", None))?;
+            .ok_or_else(|| McpError::invalid_params("no active session — call rok_memory:login first", None))?;
 
         let scope = Scope::new(&params.scope)
             .map_err(|e| McpError::invalid_params(format!("invalid scope: {e}"), None))?;
@@ -384,7 +478,7 @@ impl RokService {
             }
             Role::Agent => Self::ok(format!(
                 "proposal staged (agent cannot write directly)\n  scope: {}\n  key: {}\n  from: {}\n  size: {} bytes\n\n\
-                 The owner must accept this with rok_propose using their spend seed.",
+                 The owner must accept this with rok_memory:propose using their spend seed.",
                 params.scope,
                 params.key,
                 params.agent_id,
@@ -393,8 +487,8 @@ impl RokService {
         }
     }
 
-    #[tool(description = "Show current rok session status")]
-    async fn rok_status(&self) -> String {
+    #[tool(name = "rok_memory:status", description = "Show current rok session status")]
+    async fn status(&self) -> String {
         let guard = self.session.read().await;
         match guard.as_ref() {
             Some(session) => {
@@ -419,13 +513,18 @@ impl RokService {
 #[tool(tool_box)]
 impl rmcp::handler::server::ServerHandler for RokService {
     fn get_info(&self) -> ServerInfo {
+        let instructions = if self.auto_load {
+            "rok-mcp: Encrypted hierarchical memory backed by Fileverse.\n\
+             A session is pre-configured and memories are auto-loaded into context.\n\
+             Use rok_memory:write to store new memories, rok_memory:grant to delegate access."
+        } else {
+            "rok-mcp: Encrypted hierarchical memory backed by Fileverse.\n\
+             Call rok_memory:setup to configure, or rok_memory:login to start a session.\n\
+             Then use rok_memory:list / rok_memory:read / rok_memory:write to manage memories."
+        };
+
         ServerInfo {
-            instructions: Some(
-                "rok-mcp: Encrypted hierarchical memory backed by Fileverse. \
-                 Call rok_login to start a session, then use rok_list/rok_read/rok_write \
-                 to manage memories. Use rok_grant to delegate scoped access."
-                    .to_string(),
-            ),
+            instructions: Some(instructions.to_string()),
             capabilities: ServerCapabilities::builder()
                 .enable_tools()
                 .enable_resources()
@@ -480,7 +579,6 @@ impl rmcp::handler::server::ServerHandler for RokService {
     ) -> Result<ReadResourceResult, McpError> {
         let uri = &request.uri;
 
-        // Parse URI: rok://memory/{scope}/{key}
         let path = uri
             .strip_prefix("rok://memory")
             .ok_or_else(|| McpError::invalid_params(format!("invalid URI: {uri}"), None))?;
@@ -535,4 +633,55 @@ impl RokService {
         let entries = reader.list(&read_key).map_err(|e| anyhow::anyhow!("{e}"))?;
         Ok(entries.len())
     }
+
+}
+
+/// Add rok-memory tool permissions to .claude/settings.local.json in the current project.
+fn ensure_permissions() -> anyhow::Result<()> {
+    const ROK_PERMISSIONS: &[&str] = &[
+        "mcp__rok-memory__rok_memory:setup",
+        "mcp__rok-memory__rok_memory:login",
+        "mcp__rok-memory__rok_memory:logout",
+        "mcp__rok-memory__rok_memory:status",
+        "mcp__rok-memory__rok_memory:list",
+        "mcp__rok-memory__rok_memory:read",
+        "mcp__rok-memory__rok_memory:write",
+        "mcp__rok-memory__rok_memory:grant",
+        "mcp__rok-memory__rok_memory:propose",
+    ];
+
+    let settings_dir = std::path::Path::new(".claude");
+    let settings_path = settings_dir.join("settings.local.json");
+
+    let mut settings: serde_json::Value = if settings_path.exists() {
+        let contents = std::fs::read_to_string(&settings_path)?;
+        serde_json::from_str(&contents)?
+    } else {
+        std::fs::create_dir_all(settings_dir)?;
+        serde_json::json!({})
+    };
+
+    let allow = settings
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("settings is not an object"))?
+        .entry("permissions")
+        .or_insert_with(|| serde_json::json!({}))
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("permissions is not an object"))?
+        .entry("allow")
+        .or_insert_with(|| serde_json::json!([]))
+        .as_array_mut()
+        .ok_or_else(|| anyhow::anyhow!("allow is not an array"))?;
+
+    for perm in ROK_PERMISSIONS {
+        let perm_val = serde_json::Value::String(perm.to_string());
+        if !allow.contains(&perm_val) {
+            allow.push(perm_val);
+        }
+    }
+
+    let json = serde_json::to_string_pretty(&settings)?;
+    std::fs::write(&settings_path, json)?;
+
+    Ok(())
 }

@@ -43,7 +43,7 @@ impl Drop for Credentials {
 }
 
 /// Persisted config file at ~/.rok/session.json.
-#[derive(serde::Deserialize, serde::Serialize, Default)]
+#[derive(Clone, serde::Deserialize, serde::Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionConfig {
     #[serde(default)]
@@ -56,6 +56,9 @@ pub struct SessionConfig {
     pub read_key: Option<String>,
     #[serde(default)]
     pub spend_public: Option<String>,
+    /// If true, automatically load all memories into context on session start.
+    #[serde(default)]
+    pub auto_load: Option<bool>,
 }
 
 impl SessionConfig {

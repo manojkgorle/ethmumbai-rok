@@ -18,8 +18,5 @@
     "e2ee"
   ],
   "skills": "./skills/",
-  "mcpServers": "./.mcp.json",
-  "setup": {
-    "install": "${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh"
-  }
+  "mcpServers": "./.mcp.json"
 }
