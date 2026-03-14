@@ -1,0 +1,25 @@
+{
+  "name": "rok-memory",
+  "version": "0.1.0",
+  "description": "Encrypted decentralized memory with hierarchical access control, backed by Fileverse. Read, write, grant, and propose memories — all end-to-end encrypted with scoped key delegation.",
+  "author": {
+    "name": "manojkgorle",
+    "url": "https://github.com/manojkgorle"
+  },
+  "repository": "https://github.com/manojkgorle/rok",
+  "license": "MIT OR Apache-2.0",
+  "keywords": [
+    "memory",
+    "encryption",
+    "fileverse",
+    "mcp",
+    "hierarchical",
+    "decentralized",
+    "e2ee"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "setup": {
+    "install": "${CLAUDE_PLUGIN_ROOT}/scripts/setup.sh"
+  }
+}
