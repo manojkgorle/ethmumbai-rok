@@ -1,2 +1,2 @@
 - [ ] add scope based md files to skills
-- [ ] enhance claude code skill to autonomosly do things(install fileverse, create keys, levels etc)
+- [x] enhance claude code skill to autonomosly do things(install fileverse, create keys, levels etc)
