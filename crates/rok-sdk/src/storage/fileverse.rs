@@ -90,9 +90,8 @@ impl FileverseBackend {
             .decode(&doc.content)
             .map_err(|e| RokError::StorageError(format!("base64 decode: {}", e)))?;
 
-        let (scope, key) = Self::parse_title(&doc.title).unwrap_or_else(|| {
-            ("unknown".to_string(), doc.ddoc_id.clone())
-        });
+        let (scope, key) = Self::parse_title(&doc.title)
+            .unwrap_or_else(|| ("unknown".to_string(), doc.ddoc_id.clone()));
 
         // Parse ISO timestamps to unix seconds (best-effort)
         let created_at = parse_timestamp(&doc.created_at);
@@ -221,9 +220,7 @@ impl StorageBackend for FileverseBackend {
             .nodes
             .into_iter()
             .find(|d| d.title == query)
-            .ok_or_else(|| {
-                RokError::StorageError(format!("not found: {}:{}", scope, key))
-            })?;
+            .ok_or_else(|| RokError::StorageError(format!("not found: {}:{}", scope, key)))?;
 
         self.ddoc_to_entry(doc)
     }
@@ -293,10 +290,7 @@ impl FileverseBackend {
         let resp = self
             .client
             .get(format!("{}/api/ddocs", self.base_url))
-            .query(&[
-                ("apiKey", &self.api_key),
-                ("limit", &"1000".to_string()),
-            ])
+            .query(&[("apiKey", &self.api_key), ("limit", &"1000".to_string())])
             .send()
             .map_err(Self::map_err)?;
 

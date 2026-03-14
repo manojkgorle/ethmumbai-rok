@@ -9,13 +9,12 @@ use crate::cli::{MemoryAction, MemoryArgs};
 
 pub fn run(args: MemoryArgs) -> anyhow::Result<()> {
     if args.api_key.is_empty() {
-        anyhow::bail!("Fileverse API key required: set FILEVERSE_API_KEY env var or pass --api-key");
+        anyhow::bail!(
+            "Fileverse API key required: set FILEVERSE_API_KEY env var or pass --api-key"
+        );
     }
 
-    let backend = FileverseBackend::with_base_url(
-        args.fileverse_url.clone(),
-        args.api_key.clone(),
-    );
+    let backend = FileverseBackend::with_base_url(args.fileverse_url.clone(), args.api_key.clone());
 
     match args.action {
         MemoryAction::Write(a) => {
@@ -120,7 +119,10 @@ pub fn run(args: MemoryArgs) -> anyhow::Result<()> {
             };
 
             let id = store.accept_proposal(&proposal)?;
-            println!("Accepted proposal from '{}' at {}:{}", a.agent_id, a.scope, a.key);
+            println!(
+                "Accepted proposal from '{}' at {}:{}",
+                a.agent_id, a.scope, a.key
+            );
             println!("  Storage ID: {}", id.0);
             Ok(())
         }

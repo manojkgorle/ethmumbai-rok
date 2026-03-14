@@ -130,7 +130,9 @@ Next milestone: v2.0 launch in Q3.
     for s in &sections {
         println!(
             "  [{}] scopes={:?} ({} bytes)",
-            s.name, s.scopes, s.content.len()
+            s.name,
+            s.scopes,
+            s.content.len()
         );
     }
 
@@ -253,17 +255,16 @@ Next milestone: v2.0 launch in Q3.
     let root_read = spend.derive_root_read_key();
 
     // Pre-derive scope keys for recipient mode sections
-    let scope_keys: std::collections::HashMap<String, ReadKeyPair> = [
-        "/finance",
-        "/legal",
-        "/engineering",
-    ]
-    .iter()
-    .map(|s| {
-        let key = root_read.derive_child_segment(s.trim_start_matches('/')).unwrap();
-        (s.to_string(), key)
-    })
-    .collect();
+    let scope_keys: std::collections::HashMap<String, ReadKeyPair> =
+        ["/finance", "/legal", "/engineering"]
+            .iter()
+            .map(|s| {
+                let key = root_read
+                    .derive_child_segment(s.trim_start_matches('/'))
+                    .unwrap();
+                (s.to_string(), key)
+            })
+            .collect();
 
     let mut builder = SectionedEnvelopeBuilder::new();
     for s in &sections {

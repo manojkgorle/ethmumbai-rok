@@ -82,9 +82,10 @@ impl StorageBackend for MemoryStorage {
         let id = StorageId(composite.clone());
         let now = now_unix();
 
-        let mut entries = self.entries.lock().map_err(|e| {
-            RokError::StorageError(format!("lock poisoned: {}", e))
-        })?;
+        let mut entries = self
+            .entries
+            .lock()
+            .map_err(|e| RokError::StorageError(format!("lock poisoned: {}", e)))?;
 
         let (created_at, updated_at) = if let Some(existing) = entries.get(&composite) {
             (existing.created_at, now)
@@ -108,9 +109,10 @@ impl StorageBackend for MemoryStorage {
     }
 
     fn get(&self, id: &StorageId) -> Result<StorageEntry> {
-        let entries = self.entries.lock().map_err(|e| {
-            RokError::StorageError(format!("lock poisoned: {}", e))
-        })?;
+        let entries = self
+            .entries
+            .lock()
+            .map_err(|e| RokError::StorageError(format!("lock poisoned: {}", e)))?;
 
         entries
             .get(&id.0)
@@ -124,9 +126,10 @@ impl StorageBackend for MemoryStorage {
     }
 
     fn list(&self, scope_prefix: &str) -> Result<Vec<StorageEntry>> {
-        let entries = self.entries.lock().map_err(|e| {
-            RokError::StorageError(format!("lock poisoned: {}", e))
-        })?;
+        let entries = self
+            .entries
+            .lock()
+            .map_err(|e| RokError::StorageError(format!("lock poisoned: {}", e)))?;
 
         let results: Vec<StorageEntry> = entries
             .values()
@@ -143,9 +146,10 @@ impl StorageBackend for MemoryStorage {
     }
 
     fn delete(&self, id: &StorageId) -> Result<()> {
-        let mut entries = self.entries.lock().map_err(|e| {
-            RokError::StorageError(format!("lock poisoned: {}", e))
-        })?;
+        let mut entries = self
+            .entries
+            .lock()
+            .map_err(|e| RokError::StorageError(format!("lock poisoned: {}", e)))?;
 
         entries
             .remove(&id.0)
@@ -161,7 +165,9 @@ mod tests {
     #[test]
     fn test_put_and_get() {
         let storage = MemoryStorage::new();
-        let id = storage.put("/finance", "report", b"encrypted-data").unwrap();
+        let id = storage
+            .put("/finance", "report", b"encrypted-data")
+            .unwrap();
         let entry = storage.get(&id).unwrap();
         assert_eq!(entry.scope, "/finance");
         assert_eq!(entry.key, "report");

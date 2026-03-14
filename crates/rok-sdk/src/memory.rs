@@ -74,8 +74,9 @@ impl<B: StorageBackend> MemoryStore<B> {
             let envelope = EncryptedEnvelope::from_bytes(&entry.data)?;
             match decrypt(&envelope, read_key, &vk) {
                 Ok(data) => {
-                    let entry_scope = Scope::new(&entry.scope)
-                        .map_err(|e| RokError::StorageError(format!("bad scope in storage: {}", e)))?;
+                    let entry_scope = Scope::new(&entry.scope).map_err(|e| {
+                        RokError::StorageError(format!("bad scope in storage: {}", e))
+                    })?;
                     memories.push(MemoryEntry {
                         scope: entry_scope,
                         key: entry.key,
@@ -150,8 +151,9 @@ impl<B: StorageBackend> MemoryReader<B> {
             let envelope = EncryptedEnvelope::from_bytes(&entry.data)?;
             match decrypt(&envelope, read_key, &self.spend_vk) {
                 Ok(data) => {
-                    let entry_scope = Scope::new(&entry.scope)
-                        .map_err(|e| RokError::StorageError(format!("bad scope in storage: {}", e)))?;
+                    let entry_scope = Scope::new(&entry.scope).map_err(|e| {
+                        RokError::StorageError(format!("bad scope in storage: {}", e))
+                    })?;
                     memories.push(MemoryEntry {
                         scope: entry_scope,
                         key: entry.key,
@@ -176,15 +178,17 @@ mod tests {
     use super::*;
     use crate::storage::MemoryStorage;
 
-    fn setup() -> (MemoryStore<MemoryStorage>, ReadKeyPair, ReadKeyPair, ReadKeyPair) {
+    fn setup() -> (
+        MemoryStore<MemoryStorage>,
+        ReadKeyPair,
+        ReadKeyPair,
+        ReadKeyPair,
+    ) {
         let spend = SpendKeyPair::from_seed(&[42u8; 32]);
         let root = spend.derive_root_read_key();
         let finance = root.derive_child_segment("finance").unwrap();
         let engineering = root.derive_child_segment("engineering").unwrap();
-        let store = MemoryStore::new(
-            SpendKeyPair::from_seed(&[42u8; 32]),
-            MemoryStorage::new(),
-        );
+        let store = MemoryStore::new(SpendKeyPair::from_seed(&[42u8; 32]), MemoryStorage::new());
         (store, root, finance, engineering)
     }
 
@@ -225,9 +229,15 @@ mod tests {
     fn test_list_memories() {
         let (store, root, _, _) = setup();
 
-        store.write(&Scope::new("/finance").unwrap(), "report", b"r1").unwrap();
-        store.write(&Scope::new("/finance/q1").unwrap(), "q1", b"q1data").unwrap();
-        store.write(&Scope::new("/engineering").unwrap(), "roadmap", b"eng").unwrap();
+        store
+            .write(&Scope::new("/finance").unwrap(), "report", b"r1")
+            .unwrap();
+        store
+            .write(&Scope::new("/finance/q1").unwrap(), "q1", b"q1data")
+            .unwrap();
+        store
+            .write(&Scope::new("/engineering").unwrap(), "roadmap", b"eng")
+            .unwrap();
 
         // Root sees everything
         let all = store.list(&root).unwrap();
@@ -238,9 +248,15 @@ mod tests {
     fn test_list_scoped() {
         let (store, _, finance, _) = setup();
 
-        store.write(&Scope::new("/finance").unwrap(), "report", b"r1").unwrap();
-        store.write(&Scope::new("/finance/q1").unwrap(), "q1", b"q1data").unwrap();
-        store.write(&Scope::new("/engineering").unwrap(), "roadmap", b"eng").unwrap();
+        store
+            .write(&Scope::new("/finance").unwrap(), "report", b"r1")
+            .unwrap();
+        store
+            .write(&Scope::new("/finance/q1").unwrap(), "q1", b"q1data")
+            .unwrap();
+        store
+            .write(&Scope::new("/engineering").unwrap(), "roadmap", b"eng")
+            .unwrap();
 
         // Finance key should only see /finance and /finance/q1
         let finance_memories = store.list(&finance).unwrap();
