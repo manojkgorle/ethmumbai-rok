@@ -648,7 +648,7 @@
         <!-- Install -->
         <section id="install">
             <div class="section-label">Get started</div>
-            <h2>Install in 2 minutes</h2>
+            <h2>Get started in minutes</h2>
             <div class="install-grid">
 
                 <!-- Claude Code -->
@@ -659,7 +659,7 @@
                         <span class="tag">Recommended</span>
                     </div>
                     <div class="install-body">
-                        <p>Install from the plugin marketplace or use a local checkout.</p>
+                        <p>Two ways to install &mdash; pick one.</p>
                         <div class="code-block">
                             <span class="comment"># From marketplace</span><br>
                             <span class="cmd">/plugin marketplace add manojkgorle/rok</span><br>
@@ -685,7 +685,7 @@
                         <h3>Cursor</h3>
                     </div>
                     <div class="install-body">
-                        <p>Add the MCP server and merge the config into your project.</p>
+                        <p>Install the binary, add one config file.</p>
                         <div class="code-block">
                             <span class="comment"># Install the binary</span><br>
                             <span class="cmd">cargo install --git https://github.com/manojkgorle/rok rok-mcp</span>
@@ -726,17 +726,17 @@
         <!-- Features -->
         <section>
             <div class="section-label">Why rok</div>
-            <h2>Memory that's actually secure</h2>
+            <h2>Security that doesn't get in the way</h2>
             <div class="features">
                 <div class="feature-card">
                     <div class="feature-icon">&#x1f512;</div>
-                    <h3>Zero-knowledge storage</h3>
-                    <p>Your memories are encrypted before they leave your machine. The server stores opaque blobs &mdash; it can't read your data.</p>
+                    <h3>Nothing leaves unencrypted</h3>
+                    <p>Memories are encrypted on your machine before storage. The server holds opaque blobs &mdash; it can't read your data.</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">&#x1f333;</div>
                     <h3>Scoped access control</h3>
-                    <p>Give your finance agent access to /finance without exposing /engineering. Cryptographic isolation, not ACLs.</p>
+                    <p>Give your finance agent access to /finance without exposing /engineering. Enforced by cryptography, not permissions files.</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">&#x1f511;</div>
@@ -764,26 +764,26 @@
         <!-- Built for -->
         <section>
             <div class="section-label">Built for</div>
-            <h2>Teams that take security seriously</h2>
+            <h2>Who uses rok</h2>
             <div class="persona-grid">
                 <div class="persona-card">
                     <div class="persona-who">AI-native teams</div>
-                    <p>Your agents work across sessions and projects. rok gives them persistent context without leaking proprietary knowledge to third-party servers.</p>
+                    <p>Persistent agent context across sessions without leaking proprietary knowledge to third-party servers.</p>
                 </div>
                 <div class="persona-card">
                     <div class="persona-who">Security engineers</div>
-                    <p>Audit the crypto yourself &mdash; it's open source. ChaCha20, Ed25519, HKDF with domain separation. No proprietary black boxes.</p>
+                    <p>Auditable, open-source cryptography. ChaCha20, Ed25519, HKDF with domain separation. No black boxes.</p>
                 </div>
                 <div class="persona-card">
                     <div class="persona-who">Platform builders</div>
-                    <p>Use rok-core as a Rust crate to build encrypted, scope-based access control into your own product. No MCP dependency required.</p>
+                    <p>rok-core is a standalone Rust crate for encrypted, scope-based access control. No MCP dependency required.</p>
                 </div>
             </div>
         </section>
 
-        <!-- How it works -->
+        <!-- Under the hood -->
         <section>
-            <div class="section-label">Architecture</div>
+            <div class="section-label">Under the hood</div>
             <h2>How it works</h2>
             <div class="flow">
                 <div class="flow-node">You / Agent</div>
@@ -802,12 +802,6 @@
                 <span class="crypto-tag">HKDF-SHA256</span>
                 <span class="crypto-tag">ML-KEM-768</span>
             </div>
-        </section>
-
-        <!-- Under the hood -->
-        <section>
-            <div class="section-label">Under the hood</div>
-            <h2>What happens when you store a memory</h2>
             <div class="hood-card hood-full" style="margin-bottom:20px">
                 <ol class="step-list">
                     <li>
@@ -816,19 +810,19 @@
                     </li>
                     <li>
                         <span class="step-num">2</span>
-                        <span class="step-text"><strong>rok-mcp</strong> derives the encryption key for <code style="color:var(--accent);font-family:var(--mono);font-size:0.82rem">/engineering/decisions</code> from your spend seed via HKDF-SHA256, step-wise through each path component</span>
+                        <span class="step-text"><strong>rok derives a scope-specific key</strong> from your root seed &mdash; one key per path, each cryptographically isolated</span>
                     </li>
                     <li>
                         <span class="step-num">3</span>
-                        <span class="step-text"><strong>Encrypts</strong> the memory with ChaCha20-Poly1305, wraps the data key with AES-256-GCM-SIV for the scope, and signs the envelope with Ed25519</span>
+                        <span class="step-text"><strong>Encrypts and signs</strong> the memory locally. The ciphertext is authenticated &mdash; tampered data is rejected on read</span>
                     </li>
                     <li>
                         <span class="step-num">4</span>
-                        <span class="step-text"><strong>Stores</strong> the opaque ciphertext blob on Fileverse. The server never sees plaintext &mdash; not the content, not the key, not even the scope name</span>
+                        <span class="step-text"><strong>Stores the ciphertext</strong> on Fileverse. The server never sees plaintext &mdash; not the content, not the key, not even the scope name</span>
                     </li>
                     <li>
                         <span class="step-num">5</span>
-                        <span class="step-text"><strong>On next session start</strong>, the auto-load hook decrypts all accessible memories and injects them into the agent's context</span>
+                        <span class="step-text"><strong>Next session</strong>, all accessible memories are decrypted and loaded into the agent's context automatically</span>
                     </li>
                 </ol>
             </div>
@@ -873,8 +867,8 @@
 
         <!-- rok-core -->
         <section>
-            <div class="section-label">For developers</div>
-            <h2>Use rok-core as a Rust crate</h2>
+            <div class="section-label">Rust crate</div>
+            <h2>Build with rok-core</h2>
             <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:24px;max-width:600px;">
                 Generate keys, derive scoped children, encrypt, and decrypt &mdash; all in a few lines. No MCP server needed.
             </p>
@@ -923,16 +917,16 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <tr><td><code>setup</code></td><td><span class="role">any</span></td><td>Configure credentials and start session</td></tr>
-                        <tr><td><code>login</code></td><td><span class="role">any</span></td><td>Authenticate with spend seed or read key</td></tr>
-                        <tr><td><code>logout</code></td><td><span class="role">any</span></td><td>End session, zeroize credentials</td></tr>
-                        <tr><td><code>list</code></td><td><span class="role">any</span></td><td>List accessible memories</td></tr>
+                        <tr><td><code>setup</code></td><td><span class="role">any</span></td><td>Save credentials and start a session</td></tr>
+                        <tr><td><code>login</code></td><td><span class="role">any</span></td><td>Authenticate as owner or agent</td></tr>
+                        <tr><td><code>logout</code></td><td><span class="role">any</span></td><td>End session and wipe credentials from memory</td></tr>
+                        <tr><td><code>list</code></td><td><span class="role">any</span></td><td>Show all memories you can access</td></tr>
                         <tr><td><code>read</code></td><td><span class="role">any</span></td><td>Decrypt and return a memory</td></tr>
-                        <tr><td><code>write</code></td><td><span class="role">owner</span></td><td>Encrypt and store a memory</td></tr>
-                        <tr><td><code>grant</code></td><td><span class="role">owner</span></td><td>Export scoped read key for delegation</td></tr>
-                        <tr><td><code>propose</code></td><td><span class="role">any</span></td><td>Stage a write for owner approval</td></tr>
-                        <tr><td><code>sync</code></td><td><span class="role">any</span></td><td>Batch upsert with dedup</td></tr>
-                        <tr><td><code>status</code></td><td><span class="role">any</span></td><td>Session role, scope, memory count</td></tr>
+                        <tr><td><code>write</code></td><td><span class="role">owner</span></td><td>Encrypt and store a new memory</td></tr>
+                        <tr><td><code>grant</code></td><td><span class="role">owner</span></td><td>Share scoped read access with others</td></tr>
+                        <tr><td><code>propose</code></td><td><span class="role">any</span></td><td>Suggest a write for the owner to approve</td></tr>
+                        <tr><td><code>sync</code></td><td><span class="role">any</span></td><td>Bulk save memories, skipping duplicates</td></tr>
+                        <tr><td><code>status</code></td><td><span class="role">any</span></td><td>Check your role, scope, and memory count</td></tr>
                     </tbody>
                 </table>
             </div>
