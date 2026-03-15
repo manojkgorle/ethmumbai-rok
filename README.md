@@ -84,7 +84,7 @@ Each HKDF derivation uses a unique domain tag to prevent cross-protocol attacks:
 ### From source
 
 ```bash
-git clone https://github.com/user/read-only-keys.git
+git clone https://github.com/manojkgorle/ethmumbai-rok.git
 cd read-only-keys
 cargo build --release
 ```

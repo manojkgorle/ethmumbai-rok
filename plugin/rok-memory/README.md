@@ -19,7 +19,7 @@ End-to-end encrypted, hierarchically scoped, with key delegation — no plaintex
 ### From local checkout
 
 ```bash
-git clone https://github.com/manojkgorle/rok
+git clone https://github.com/manojkgorle/ethmumbai-rok
 claude --plugin-dir rok/plugin/rok-memory
 ```
 
@@ -27,7 +27,7 @@ claude --plugin-dir rok/plugin/rok-memory
 
 ```bash
 # Install the MCP server binary
-cargo install --git https://github.com/manojkgorle/rok rok-mcp
+cargo install --git https://github.com/manojkgorle/ethmumbai-rok rok-mcp
 
 # Add to your Claude Code MCP settings (~/.claude.json)
 {
