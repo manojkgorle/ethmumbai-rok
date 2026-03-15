@@ -18,5 +18,6 @@
     "e2ee"
   ],
   "skills": "./skills/",
+  "rules": "./rules/",
   "mcpServers": "./.mcp.json"
 }

@@ -1,6 +1,6 @@
 # rok-memory
 
-Claude Code plugin for encrypted decentralized memory backed by [Fileverse](https://fileverse.io).
+Claude Code and Cursor plugin for encrypted decentralized memory backed by [Fileverse](https://fileverse.io).
 
 End-to-end encrypted, hierarchically scoped, with key delegation — no plaintext ever leaves your machine.
 
@@ -38,6 +38,51 @@ cargo install --git https://github.com/manojkgorle/rok rok-mcp
   }
 }
 ```
+
+### Cursor
+
+All Cursor-related files live inside the plugin for easy installation:
+
+| What | In plugin |
+|------|-----------|
+| Cursor manifest (rules, skills, MCP) | `.cursor-plugin/plugin.json` |
+| MCP server config | `.cursor/mcp.json` |
+| AutoLoad refresh script | `scripts/refresh-rok-memory-context.sh` |
+
+To use it in Cursor:
+
+- **From this repo:** Open the repo in Cursor; the plugin can be loaded from `plugin/rok-memory/`. Merge `plugin/rok-memory/.cursor/mcp.json` into your project's `.cursor/mcp.json` (or copy it if you have no other MCP servers).
+- **MCP:** The plugin includes `.cursor/mcp.json`; merge it into your project's `.cursor/mcp.json`. Install the binary from the workspace (or from the repo that contains the plugin):
+
+```bash
+cargo install --path crates/rok-mcp
+```
+
+**Restart:** After adding or changing `.cursor/mcp.json`, fully quit and reopen Cursor so the rok-memory MCP server loads.
+
+**Trigger / login:** You don’t “launch” the plugin — the MCP is available as soon as Cursor has loaded it. To start a session you can:
+
+1. **Pre-configure (recommended):** Create `~/.rok/session.json` with `apiKey`, `fileverseUrl`, and `spendSeed` (see [Credentials](#credentials)). The server will use it when tools run; no in-chat login needed.
+2. **In chat:** In a Cursor Composer or chat, say e.g. “Set up rok memory” or “Log me into rok memory” — the AI will call `rok_memory:setup` (first-time config) or `rok_memory:login` (spend seed or read key + spend public). After that, “remember this”, “list my memories”, “store at /scope” etc. will use the memory tools.
+
+To get **autoLoad-style context** (memories injected at session start), Cursor has no SessionStart hooks, so use the refresh script:
+
+1. Ensure `~/.rok/session.json` has `"autoLoad": true`.
+2. Run **Tasks: Run Task** → **Refresh rok-memory context** (or run `WORKSPACE_ROOT=/path/to/project bash plugin/rok-memory/scripts/refresh-rok-memory-context.sh` from the project root).
+3. The script writes the current memory dump into `.cursor/rules/rok-memory-context.mdc` with `alwaysApply: true`, so Cursor injects it at the start of each new chat.
+
+Run the task when you start work or when you want to refresh context; new chats will include the latest memories until you run it again.
+
+### How Cursor plugins are installed (and how this one fits)
+
+Cursor installs plugins in two main ways:
+
+1. **From the Cursor Marketplace** — Users open the marketplace in Cursor (or [cursor.com/marketplace](https://cursor.com/marketplace)), browse or search, and click Install. Plugins are Git repositories submitted to Cursor and reviewed before listing. They can be scoped to a project or installed at the user level.
+2. **From a team marketplace** — On Teams/Enterprise, admins add a GitHub repo as a team marketplace; developers see it in the marketplace panel and install from there (required plugins install automatically for their group).
+
+A valid Cursor plugin is a directory with a **`.cursor-plugin/plugin.json`** manifest and standard folders: **`rules/`**, **`skills/`**, **`.mcp.json`** (at plugin root), and optionally `hooks/`, `agents/`, `commands/`. Cursor discovers these automatically. Multi-plugin repos put a **`.cursor-plugin/marketplace.json`** at the **repository root** listing each plugin by `name` and `source` (path to the plugin directory).
+
+**This plugin is compatible** with that model: it has `.cursor-plugin/plugin.json`, `rules/`, `skills/`, and `.mcp.json` in `plugin/rok-memory/`. This repo also has `.cursor-plugin/marketplace.json` at the repo root with `"source": "./plugin/rok-memory"`, so the whole repo can be added as a team marketplace and rok-memory installed from it. For the official Cursor Marketplace, the repo would need to be submitted at [cursor.com/marketplace/publish](https://cursor.com/marketplace/publish). The extra files (`.cursor/mcp.json` for copy-merge, `scripts/refresh-rok-memory-context.sh`) are for convenience and do not affect Cursor’s discovery.
 
 ## Setup
 
@@ -134,7 +179,7 @@ The `rok-mcp` binary supports two flags used by hooks:
 
 | Flag | Purpose |
 |------|---------|
-| `--dump` | Print all decrypted memories to stdout (used by SessionStart hook) |
+| `--dump` | Print all decrypted memories to stdout (SessionStart hook in Claude Code; in Cursor, used by the refresh-rok-memory-context script) |
 | `--status` | Print session status as JSON (used by Stop hook to gate auto-sync) |
 
 ## How it works
@@ -157,4 +202,4 @@ Each memory is also exposed as an MCP resource at `rok://memory/{scope}/{key}`. 
 
 ## License
 
-MIT OR Apache-2.0
+GPL-3.0 with an additional restriction: modified versions of this software may not be used for commercial purposes. See [LICENSE](LICENSE) for the full terms.

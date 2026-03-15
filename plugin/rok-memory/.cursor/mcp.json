@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "rok-memory": {
+      "command": "rok-mcp",
+      "env": {
+        "RUST_LOG": "rok_mcp=info"
+      }
+    }
+  }
+}

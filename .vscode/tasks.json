@@ -1,0 +1,22 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Refresh rok-memory context",
+      "type": "shell",
+      "command": "bash",
+      "args": ["plugin/rok-memory/scripts/refresh-rok-memory-context.sh"],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "WORKSPACE_ROOT": "${workspaceFolder}"
+        }
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      },
+      "group": "none"
+    }
+  ]
+}
