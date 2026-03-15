@@ -107,23 +107,23 @@ Create `~/.rok/session.json` for auto-login on startup:
 chmod 600 ~/.rok/session.json
 ```
 
-Or skip this and call `rok_login` in conversation.
+Or skip this and call `rok_memory:login` in conversation.
 
 ## Usage
 
-Once installed, the plugin exposes 9 tools that Claude uses automatically when you interact with memories.
+Once installed, the plugin exposes 10 tools that Claude uses automatically when you interact with memories.
 
 ### Owner (has spend seed)
 
 ```
 > store "ChaCha20 chosen over AES for performance" at /engineering/decisions
-  → rok_write(scope="/engineering/decisions", key="chacha20-rationale", content="...")
+  → rok_memory:write(scope="/engineering/decisions", key="chacha20-rationale", content="...")
 
 > list my memories
-  → rok_list()
+  → rok_memory:list()
 
 > grant alice access to /engineering
-  → rok_grant(scope="/engineering")
+  → rok_memory:grant(scope="/engineering")
   → returns read_key + spend_public for alice
 ```
 
@@ -131,10 +131,10 @@ Once installed, the plugin exposes 9 tools that Claude uses automatically when y
 
 ```
 > what decisions were made about encryption?
-  → rok_read(scope="/engineering/decisions", key="chacha20-rationale")
+  → rok_memory:read(scope="/engineering/decisions", key="chacha20-rationale")
 
 > remember that we benchmarked AES too
-  → rok_propose(scope="/engineering/decisions", key="aes-benchmark", content="...")
+  → rok_memory:propose(scope="/engineering/decisions", key="aes-benchmark", content="...")
   → staged as proposal — owner must accept
 ```
 
@@ -142,15 +142,16 @@ Once installed, the plugin exposes 9 tools that Claude uses automatically when y
 
 | Tool | Role | Description |
 |------|------|-------------|
-| `rok_login` | any | Start session with spend_seed (owner) or read_key + spend_public (agent) |
-| `rok_logout` | any | End session, zeroize credentials from memory |
-| `rok_list` | any | List all memories accessible from session scope |
-| `rok_read` | any | Decrypt and return a memory by scope + key |
-| `rok_write` | owner | Encrypt and store a memory |
-| `rok_grant` | owner | Export a scoped read key for delegation |
-| `rok_propose` | any | Agent stages a write; owner accepts it |
-| `rok_sync` | any | Batch upsert with dedup; owner writes, agent proposes |
-| `rok_status` | any | Show session role, scope, memory count |
+| `rok_memory:setup` | any | Configure credentials, write `~/.rok/session.json`, and start a session |
+| `rok_memory:login` | any | Start session with spend_seed (owner) or read_key + spend_public (agent) |
+| `rok_memory:logout` | any | End session, zeroize credentials from memory |
+| `rok_memory:list` | any | List all memories accessible from session scope |
+| `rok_memory:read` | any | Decrypt and return a memory by scope + key |
+| `rok_memory:write` | owner | Encrypt and store a memory |
+| `rok_memory:grant` | owner | Export a scoped read key for delegation |
+| `rok_memory:propose` | any | Agent stages a write; owner accepts it |
+| `rok_memory:sync` | any | Batch upsert with dedup; owner writes, agent proposes |
+| `rok_memory:status` | any | Show session role, scope, memory count |
 
 ## Auto-sync
 
@@ -158,7 +159,7 @@ When `autoLoad` is enabled in `~/.rok/session.json`, the plugin automatically sy
 
 1. **SessionStart hook** loads all memories into Claude's context
 2. During the conversation, Claude works normally (and can call `rok_write` explicitly)
-3. **Stop hook** fires at conversation end — it dumps current memories, then prompts Claude to call `rok_sync` with any new knowledge worth persisting
+3. **Stop hook** fires at conversation end — it dumps current memories, then prompts Claude to call `rok_memory:sync` with any new knowledge worth persisting
 
 Enable it by adding `"autoLoad": true` to your session config:
 
@@ -171,7 +172,7 @@ Enable it by adding `"autoLoad": true` to your session config:
 }
 ```
 
-`rok_sync` performs batch upsert with dedup — it reads each memory before writing and skips unchanged entries to avoid unnecessary re-encryption and Fileverse round-trips. For agents, changes are staged as proposals.
+`rok_memory:sync` performs batch upsert with dedup — it reads each memory before writing and skips unchanged entries to avoid unnecessary re-encryption and Fileverse round-trips. For agents, changes are staged as proposals.
 
 ### CLI flags
 

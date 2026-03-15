@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rok — Open Encrypted Memory for any AI Agents</title>
+    <link rel="icon" type="image/jpeg" href="logo.jpeg">
+    <style>
+        :root {
+            --bg: #0a0a0b;
+            --surface: #111113;
+            --border: #1e1e22;
+            --text: #e8e8ed;
+            --text-muted: #71717a;
+            --accent: #a78bfa;
+            --accent-dim: #7c3aed;
+            --accent-glow: rgba(167, 139, 250, 0.12);
+            --green: #34d399;
+            --mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Subtle grid background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(167, 139, 250, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(167, 139, 250, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Nav */
+        nav {
+            padding: 16px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(10, 10, 11, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid transparent;
+            margin: 0 -24px;
+            padding-left: 24px;
+            padding-right: 24px;
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--text);
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 24px;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.875rem;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover { color: var(--text); }
+
+        /* Hero */
+        .hero {
+            padding: 100px 0 80px;
+            text-align: center;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            border-radius: 100px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 32px;
+        }
+
+        .badge-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        h1 {
+            font-size: clamp(2.5rem, 6vw, 3.75rem);
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1.1;
+            margin-bottom: 20px;
+        }
+
+        h1 .highlight {
+            background: linear-gradient(135deg, var(--accent), #c4b5fd, var(--accent-dim));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 1.15rem;
+            color: var(--text-muted);
+            max-width: 540px;
+            margin: 0 auto 40px;
+            line-height: 1.7;
+        }
+
+        .hero-cta {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 28px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #0a0a0b;
+        }
+
+        .btn-primary:hover {
+            background: #b49dfc;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 30px rgba(167, 139, 250, 0.25);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+
+        .btn-ghost:hover {
+            color: var(--text);
+            border-color: #2e2e35;
+            background: var(--surface);
+        }
+
+        /* Section */
+        section {
+            padding: 60px 0;
+        }
+
+        .section-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--accent);
+            margin-bottom: 12px;
+        }
+
+        h2 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 40px;
+        }
+
+        /* Features grid */
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .feature-card {
+            padding: 24px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            transition: border-color 0.2s;
+        }
+
+        .feature-card:hover {
+            border-color: #2a2a30;
+        }
+
+        .feature-icon {
+            font-size: 1.5rem;
+            margin-bottom: 12px;
+        }
+
+        .feature-card h3 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .feature-card p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        /* Install section */
+        .install-grid {
+            display: grid;
+            gap: 20px;
+        }
+
+        .install-card {
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            overflow: hidden;
+        }
+
+        .install-header {
+            padding: 20px 24px 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .install-header .icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            background: var(--accent-glow);
+            border: 1px solid rgba(167, 139, 250, 0.15);
+        }
+
+        .install-header h3 {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .install-header .tag {
+            margin-left: auto;
+            font-size: 0.7rem;
+            padding: 3px 10px;
+            border-radius: 100px;
+            background: var(--accent-glow);
+            color: var(--accent);
+            border: 1px solid rgba(167, 139, 250, 0.15);
+        }
+
+        .install-body {
+            padding: 16px 24px 20px;
+        }
+
+        .install-body p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .code-block {
+            background: #0d0d0f;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: var(--mono);
+            font-size: 0.82rem;
+            line-height: 1.7;
+            overflow-x: auto;
+            position: relative;
+        }
+
+        .code-block .comment {
+            color: #4a4a55;
+        }
+
+        .code-block .cmd {
+            color: var(--text);
+        }
+
+        .code-block .string {
+            color: var(--green);
+        }
+
+        .code-block .key {
+            color: var(--accent);
+        }
+
+        .code-block + .code-block {
+            margin-top: 10px;
+        }
+
+        /* How it works */
+        .flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            padding: 32px 0;
+        }
+
+        .flow-node {
+            padding: 14px 22px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-align: center;
+        }
+
+        .flow-arrow {
+            color: var(--text-muted);
+            font-size: 1.2rem;
+        }
+
+        .flow-node.accent {
+            border-color: rgba(167, 139, 250, 0.2);
+            background: var(--accent-glow);
+        }
+
+        /* Tools table */
+        .tools-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .tools-table th {
+            text-align: left;
+            padding: 10px 16px;
+            font-weight: 500;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .tools-table td {
+            padding: 10px 16px;
+            border-bottom: 1px solid #151518;
+        }
+
+        .tools-table code {
+            font-family: var(--mono);
+            font-size: 0.8rem;
+            color: var(--accent);
+            background: var(--accent-glow);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .tools-table .role {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: #1a1a1f;
+            color: var(--text-muted);
+        }
+
+        /* Crypto strip */
+        .crypto-strip {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            padding: 20px 0;
+        }
+
+        .crypto-tag {
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-family: var(--mono);
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-muted);
+        }
+
+        /* Footer */
+        footer {
+            padding: 60px 0 40px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        footer a {
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        footer a:hover { color: var(--text); }
+
+        .footer-links {
+            display: flex;
+            gap: 20px;
+        }
+
+        /* Divider */
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 20px 0;
+        }
+
+        /* Built for */
+        .persona-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .persona-card {
+            padding: 24px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .persona-card .persona-who {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .persona-card p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        /* Final CTA */
+        .final-cta {
+            text-align: center;
+            padding: 80px 0;
+        }
+
+        .final-cta h2 {
+            margin-bottom: 16px;
+        }
+
+        .final-cta p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            margin-bottom: 32px;
+            max-width: 440px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .final-cta .hero-cta {
+            margin-bottom: 0;
+        }
+
+        /* Under the hood */
+        .hood-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .hood-card {
+            padding: 24px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .hood-card h3 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .hood-card p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .hood-card .mini-code {
+            margin-top: 12px;
+            font-family: var(--mono);
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            background: #0d0d0f;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+            line-height: 1.6;
+            overflow-x: auto;
+        }
+
+        .hood-full {
+            grid-column: 1 / -1;
+        }
+
+        .scope-tree {
+            font-family: var(--mono);
+            font-size: 0.82rem;
+            line-height: 1.8;
+            color: var(--text-muted);
+            padding: 20px 24px;
+            background: #0d0d0f;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-top: 12px;
+        }
+
+        .scope-tree .scope-active { color: var(--accent); }
+        .scope-tree .scope-locked { color: #ef4444; }
+        .scope-tree .scope-ok { color: var(--green); }
+
+        .step-list {
+            list-style: none;
+            padding: 0;
+            margin-top: 16px;
+        }
+
+        .step-list li {
+            display: flex;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid #151518;
+            font-size: 0.85rem;
+        }
+
+        .step-list li:last-child { border-bottom: none; }
+
+        .step-num {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            background: var(--accent-glow);
+            border: 1px solid rgba(167, 139, 250, 0.15);
+            color: var(--accent);
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .step-text {
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .step-text strong {
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .persona-grid { grid-template-columns: 1fr; }
+            .hood-grid { grid-template-columns: 1fr; }
+            .hero { padding: 60px 0 50px; }
+            .flow { flex-direction: column; }
+            .flow-arrow { transform: rotate(90deg); }
+            footer { flex-direction: column; gap: 16px; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <nav>
+            <div class="logo"><span>rok</span></div>
+            <div class="nav-links">
+                <a href="https://github.com/manojkgorle/rok/blob/main/README.md">Docs</a>
+                <a href="https://github.com/manojkgorle/rok/tree/main/plugin/rok-memory">Plugin</a>
+                <a href="https://github.com/manojkgorle/rok" style="color:var(--text);font-weight:500;">GitHub &nearr;</a>
+            </div>
+        </nav>
+
+        <!-- Hero -->
+        <section class="hero">
+            <div class="badge">
+                <span class="badge-dot"></span>
+                Open source &middot; Now available
+            </div>
+            <h1>Your agents forget<br>everything. <span class="highlight">Fix that.</span></h1>
+            <p class="subtitle">
+                Open, end-to-end encrypted, decentralized memory for AI agents. Servers see nothing.
+            </p>
+            <div class="hero-cta">
+                <a href="#install" class="btn btn-primary">Get started</a>
+                <a href="https://github.com/manojkgorle/rok" class="btn btn-ghost">View on GitHub</a>
+            </div>
+        </section>
+
+        <!-- Install -->
+        <section id="install">
+            <div class="section-label">Get started</div>
+            <h2>Install in 2 minutes</h2>
+            <div class="install-grid">
+
+                <!-- Claude Code -->
+                <div class="install-card">
+                    <div class="install-header">
+                        <div class="icon">&#x2728;</div>
+                        <h3>Claude Code</h3>
+                        <span class="tag">Recommended</span>
+                    </div>
+                    <div class="install-body">
+                        <p>Install from the plugin marketplace or use a local checkout.</p>
+                        <div class="code-block">
+                            <span class="comment"># From marketplace</span><br>
+                            <span class="cmd">/plugin marketplace add manojkgorle/rok</span><br>
+                            <span class="cmd">/plugin install rok-memory@rok-plugins</span>
+                        </div>
+                        <div class="code-block">
+                            <span class="comment"># Or from local checkout</span><br>
+                            <span class="cmd">git clone https://github.com/manojkgorle/rok</span><br>
+                            <span class="cmd">claude --plugin-dir rok/plugin/rok-memory</span>
+                        </div>
+                        <div class="code-block">
+                            <span class="comment"># Then in conversation:</span><br>
+                            <span class="string">"Set up rok memory"</span><br>
+                            <span class="comment"># That's it. Credentials saved, tools auto-allowed.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cursor -->
+                <div class="install-card">
+                    <div class="install-header">
+                        <div class="icon">&#x25a0;</div>
+                        <h3>Cursor</h3>
+                    </div>
+                    <div class="install-body">
+                        <p>Add the MCP server and merge the config into your project.</p>
+                        <div class="code-block">
+                            <span class="comment"># Install the binary</span><br>
+                            <span class="cmd">cargo install --git https://github.com/manojkgorle/rok rok-mcp</span>
+                        </div>
+                        <div class="code-block">
+                            <span class="comment"># Add to .cursor/mcp.json</span><br>
+                            <span class="cmd">{</span><br>
+                            <span class="cmd">&nbsp;&nbsp;</span><span class="key">"mcpServers"</span><span class="cmd">: {</span><br>
+                            <span class="cmd">&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="key">"rok-memory"</span><span class="cmd">: {</span><br>
+                            <span class="cmd">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="key">"command"</span><span class="cmd">: </span><span class="string">"rok-mcp"</span><br>
+                            <span class="cmd">&nbsp;&nbsp;&nbsp;&nbsp;}</span><br>
+                            <span class="cmd">&nbsp;&nbsp;}</span><br>
+                            <span class="cmd">}</span>
+                        </div>
+                        <p>Restart Cursor, then say <span style="color:var(--accent)">"Set up rok memory"</span> in chat.</p>
+                    </div>
+                </div>
+
+                <!-- Any MCP client -->
+                <div class="install-card">
+                    <div class="install-header">
+                        <div class="icon">&#x2699;</div>
+                        <h3>Any MCP Client</h3>
+                    </div>
+                    <div class="install-body">
+                        <p>rok-mcp is a standard MCP server. Point any compatible client at it.</p>
+                        <div class="code-block">
+                            <span class="comment"># Install</span><br>
+                            <span class="cmd">cargo install --git https://github.com/manojkgorle/rok rok-mcp</span><br><br>
+                            <span class="comment"># Run as stdio MCP server</span><br>
+                            <span class="cmd">rok-mcp</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features -->
+        <section>
+            <div class="section-label">Why rok</div>
+            <h2>Memory that's actually secure</h2>
+            <div class="features">
+                <div class="feature-card">
+                    <div class="feature-icon">&#x1f512;</div>
+                    <h3>Zero-knowledge storage</h3>
+                    <p>Your memories are encrypted before they leave your machine. The server stores opaque blobs &mdash; it can't read your data.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#x1f333;</div>
+                    <h3>Scoped access control</h3>
+                    <p>Give your finance agent access to /finance without exposing /engineering. Cryptographic isolation, not ACLs.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#x1f511;</div>
+                    <h3>Delegate without risk</h3>
+                    <p>Share scoped read keys with agents or teammates. They can read down, never up. Revoke anytime.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#x1f310;</div>
+                    <h3>Decentralized by default</h3>
+                    <p>Backed by Fileverse. No vendor lock-in, no central point of failure, no trust required.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#x1f916;</div>
+                    <h3>Works with your tools</h3>
+                    <p>Drop-in MCP server for Claude Code, Cursor, or any MCP-compatible agent framework.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">&#x1f9ec;</div>
+                    <h3>Post-quantum ready</h3>
+                    <p>Hybrid X25519 + ML-KEM-768 encryption. Secure today, safe against tomorrow's quantum computers.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Built for -->
+        <section>
+            <div class="section-label">Built for</div>
+            <h2>Teams that take security seriously</h2>
+            <div class="persona-grid">
+                <div class="persona-card">
+                    <div class="persona-who">AI-native teams</div>
+                    <p>Your agents work across sessions and projects. rok gives them persistent context without leaking proprietary knowledge to third-party servers.</p>
+                </div>
+                <div class="persona-card">
+                    <div class="persona-who">Security engineers</div>
+                    <p>Audit the crypto yourself &mdash; it's open source. ChaCha20, Ed25519, HKDF with domain separation. No proprietary black boxes.</p>
+                </div>
+                <div class="persona-card">
+                    <div class="persona-who">Platform builders</div>
+                    <p>Use rok-core as a Rust crate to build encrypted, scope-based access control into your own product. No MCP dependency required.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- How it works -->
+        <section>
+            <div class="section-label">Architecture</div>
+            <h2>How it works</h2>
+            <div class="flow">
+                <div class="flow-node">You / Agent</div>
+                <span class="flow-arrow">&rarr;</span>
+                <div class="flow-node accent">rok-mcp</div>
+                <span class="flow-arrow">&rarr;</span>
+                <div class="flow-node">rok-core<br><small style="color:var(--text-muted)">encrypt / decrypt</small></div>
+                <span class="flow-arrow">&rarr;</span>
+                <div class="flow-node">Fileverse<br><small style="color:var(--text-muted)">opaque ciphertext</small></div>
+            </div>
+            <div class="crypto-strip">
+                <span class="crypto-tag">ChaCha20-Poly1305</span>
+                <span class="crypto-tag">AES-256-GCM-SIV</span>
+                <span class="crypto-tag">X25519 ECDH</span>
+                <span class="crypto-tag">Ed25519</span>
+                <span class="crypto-tag">HKDF-SHA256</span>
+                <span class="crypto-tag">ML-KEM-768</span>
+            </div>
+        </section>
+
+        <!-- Under the hood -->
+        <section>
+            <div class="section-label">Under the hood</div>
+            <h2>What happens when you store a memory</h2>
+            <div class="hood-card hood-full" style="margin-bottom:20px">
+                <ol class="step-list">
+                    <li>
+                        <span class="step-num">1</span>
+                        <span class="step-text"><strong>You say</strong> "remember that we chose ChaCha20 for performance" <strong>at /engineering/decisions</strong></span>
+                    </li>
+                    <li>
+                        <span class="step-num">2</span>
+                        <span class="step-text"><strong>rok-mcp</strong> derives the encryption key for <code style="color:var(--accent);font-family:var(--mono);font-size:0.82rem">/engineering/decisions</code> from your spend seed via HKDF-SHA256, step-wise through each path component</span>
+                    </li>
+                    <li>
+                        <span class="step-num">3</span>
+                        <span class="step-text"><strong>Encrypts</strong> the memory with ChaCha20-Poly1305, wraps the data key with AES-256-GCM-SIV for the scope, and signs the envelope with Ed25519</span>
+                    </li>
+                    <li>
+                        <span class="step-num">4</span>
+                        <span class="step-text"><strong>Stores</strong> the opaque ciphertext blob on Fileverse. The server never sees plaintext &mdash; not the content, not the key, not even the scope name</span>
+                    </li>
+                    <li>
+                        <span class="step-num">5</span>
+                        <span class="step-text"><strong>On next session start</strong>, the auto-load hook decrypts all accessible memories and injects them into the agent's context</span>
+                    </li>
+                </ol>
+            </div>
+
+            <div class="hood-grid">
+                <div class="hood-card">
+                    <h3>Hierarchical key tree</h3>
+                    <p>A single spend seed derives an entire tree of scoped read keys. A key at any level can decrypt its scope and everything below &mdash; but never above or sideways.</p>
+                    <div class="scope-tree">
+                        <span class="scope-active">Spend Key (Ed25519)</span><br>
+                        &nbsp;&nbsp;&#x2514;&#x2500;&#x2500; <span class="scope-active">Root Read Key (/)</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#x251c;&#x2500;&#x2500; <span class="scope-ok">/engineering</span> <span style="color:var(--green)">&#x2713;</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#x2502;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#x251c;&#x2500;&#x2500; <span class="scope-ok">/engineering/decisions</span> <span style="color:var(--green)">&#x2713;</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#x2502;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#x2514;&#x2500;&#x2500; <span class="scope-ok">/engineering/infra</span> <span style="color:var(--green)">&#x2713;</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#x2514;&#x2500;&#x2500; <span class="scope-locked">/finance</span> <span style="color:#ef4444">&#x2717;</span><br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#x2514;&#x2500;&#x2500; <span class="scope-locked">/finance/q1</span> <span style="color:#ef4444">&#x2717;</span><br>
+                        <br>
+                        <span style="color:var(--text-muted);font-size:0.75rem">An /engineering key can read everything green. Finance is cryptographically isolated.</span>
+                    </div>
+                </div>
+
+                <div class="hood-card">
+                    <h3>Key delegation</h3>
+                    <p>Grant scoped access to agents or teammates without exposing your root key. Recipients can derive children further but never escalate to parent scopes.</p>
+                    <div class="mini-code">
+                        <span style="color:#4a4a55">// Owner grants /engineering to an agent</span><br>
+                        <span style="color:var(--accent)">rok_memory:grant</span>(scope=<span style="color:var(--green)">"/engineering"</span>)<br>
+                        <span style="color:#4a4a55">// Returns: read_key + spend_public</span><br>
+                        <span style="color:#4a4a55">// Agent can read /engineering/**</span><br>
+                        <span style="color:#4a4a55">// Agent CANNOT read /finance</span><br><br>
+
+                        <span style="color:#4a4a55">// Agent writes are staged as proposals</span><br>
+                        <span style="color:var(--accent)">rok_memory:propose</span>(<br>
+                        &nbsp;&nbsp;scope=<span style="color:var(--green)">"/engineering/decisions"</span>,<br>
+                        &nbsp;&nbsp;key=<span style="color:var(--green)">"use-chacha20"</span>,<br>
+                        &nbsp;&nbsp;content=<span style="color:var(--green)">"..."</span><br>
+                        ) <span style="color:#4a4a55">// Owner must accept</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- rok-core -->
+        <section>
+            <div class="section-label">For developers</div>
+            <h2>Use rok-core as a Rust crate</h2>
+            <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:24px;max-width:600px;">
+                Generate keys, derive scoped children, encrypt, and decrypt &mdash; all in a few lines. No MCP server needed.
+            </p>
+
+            <div class="install-card">
+                <div class="install-body">
+                    <div class="code-block">
+                        <span class="comment">use</span> <span class="cmd">rok_core::keys::{spend::SpendKeyPair, scope::Scope};</span><br>
+                        <span class="comment">use</span> <span class="cmd">rok_core::encrypt::{Algorithm, EncryptBuilder, decrypt};</span><br>
+                        <br>
+                        <span class="comment">// Generate keys and derive scoped children</span><br>
+                        <span class="key">let</span> <span class="cmd">spend = SpendKeyPair::generate(&amp;mut rng);</span><br>
+                        <span class="key">let</span> <span class="cmd">root = spend.derive_root_read_key();</span><br>
+                        <span class="key">let</span> <span class="cmd">eng = root.derive_child(&amp;Scope::new(</span><span class="string">"/engineering"</span><span class="cmd">)?)?;</span><br>
+                        <br>
+                        <span class="comment">// Encrypt to a scope &mdash; no recipient list needed</span><br>
+                        <span class="key">let</span> <span class="cmd">envelope = EncryptBuilder::new(</span><br>
+                        <span class="cmd">&nbsp;&nbsp;Algorithm::EciesX25519ChaCha20, Scope::new(</span><span class="string">"/engineering"</span><span class="cmd">)?</span><br>
+                        <span class="cmd">).set_spend_key(&amp;spend).set_scope_based()</span><br>
+                        <span class="cmd">&nbsp;.encrypt(b</span><span class="string">"secret"</span><span class="cmd">, &amp;mut rng)?;</span><br>
+                        <br>
+                        <span class="comment">// Any ancestor key decrypts. Sibling scopes can't.</span><br>
+                        <span class="key">let</span> <span class="cmd">data = decrypt(&amp;envelope, &amp;root, &amp;spend.verifying_key())?;</span> <span class="comment">// root works</span><br>
+                        <span class="key">let</span> <span class="cmd">data = decrypt(&amp;envelope, &amp;eng, &amp;spend.verifying_key())?;</span> <span class="comment">// /engineering works</span><br>
+                        <span class="comment">// decrypt(&amp;envelope, &amp;finance_key, ...) &mdash; fails, isolated</span>
+                    </div>
+                    <p style="margin-top:12px;margin-bottom:0;">
+                        Supports post-quantum hybrid (ML-KEM-768), sectioned envelopes, key export/import, and more.
+                        <a href="https://github.com/manojkgorle/rok/blob/main/README.md#library-usage" style="color:var(--accent);text-decoration:none;">Read the full API docs &rarr;</a>
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tools -->
+        <section>
+            <div class="section-label">MCP Tools</div>
+            <h2>10 tools, one protocol</h2>
+            <div style="border-radius:12px; border:1px solid var(--border); overflow:hidden; background:var(--surface);">
+                <table class="tools-table">
+                    <thead>
+                        <tr>
+                            <th>Tool</th>
+                            <th>Role</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>setup</code></td><td><span class="role">any</span></td><td>Configure credentials and start session</td></tr>
+                        <tr><td><code>login</code></td><td><span class="role">any</span></td><td>Authenticate with spend seed or read key</td></tr>
+                        <tr><td><code>logout</code></td><td><span class="role">any</span></td><td>End session, zeroize credentials</td></tr>
+                        <tr><td><code>list</code></td><td><span class="role">any</span></td><td>List accessible memories</td></tr>
+                        <tr><td><code>read</code></td><td><span class="role">any</span></td><td>Decrypt and return a memory</td></tr>
+                        <tr><td><code>write</code></td><td><span class="role">owner</span></td><td>Encrypt and store a memory</td></tr>
+                        <tr><td><code>grant</code></td><td><span class="role">owner</span></td><td>Export scoped read key for delegation</td></tr>
+                        <tr><td><code>propose</code></td><td><span class="role">any</span></td><td>Stage a write for owner approval</td></tr>
+                        <tr><td><code>sync</code></td><td><span class="role">any</span></td><td>Batch upsert with dedup</td></tr>
+                        <tr><td><code>status</code></td><td><span class="role">any</span></td><td>Session role, scope, memory count</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Final CTA -->
+        <section class="final-cta">
+            <h2>Give your agents memory<br>they can't leak</h2>
+            <p>Open memory. Open source. No lock-in. Ready to use today.</p>
+            <div class="hero-cta">
+                <a href="#install" class="btn btn-primary">Get started</a>
+                <a href="https://github.com/manojkgorle/rok" class="btn btn-ghost">Star on GitHub</a>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer>
+            <span>rok &copy; 2026</span>
+            <div class="footer-links">
+                <a href="https://github.com/manojkgorle/rok">GitHub</a>
+                <a href="https://github.com/manojkgorle/rok/blob/main/README.md">Docs</a>
+                <a href="https://github.com/manojkgorle/rok/blob/main/LICENSE">License</a>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
