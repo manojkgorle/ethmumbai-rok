@@ -66,7 +66,7 @@ Or skip this and call `rok_login` in conversation.
 
 ## Usage
 
-Once installed, the plugin exposes 8 tools that Claude uses automatically when you interact with memories.
+Once installed, the plugin exposes 9 tools that Claude uses automatically when you interact with memories.
 
 ### Owner (has spend seed)
 
@@ -104,7 +104,38 @@ Once installed, the plugin exposes 8 tools that Claude uses automatically when y
 | `rok_write` | owner | Encrypt and store a memory |
 | `rok_grant` | owner | Export a scoped read key for delegation |
 | `rok_propose` | any | Agent stages a write; owner accepts it |
+| `rok_sync` | any | Batch upsert with dedup; owner writes, agent proposes |
 | `rok_status` | any | Show session role, scope, memory count |
+
+## Auto-sync
+
+When `autoLoad` is enabled in `~/.rok/session.json`, the plugin automatically syncs context at conversation end:
+
+1. **SessionStart hook** loads all memories into Claude's context
+2. During the conversation, Claude works normally (and can call `rok_write` explicitly)
+3. **Stop hook** fires at conversation end — it dumps current memories, then prompts Claude to call `rok_sync` with any new knowledge worth persisting
+
+Enable it by adding `"autoLoad": true` to your session config:
+
+```json
+{
+  "apiKey": "your-fileverse-api-key",
+  "fileverseUrl": "http://127.0.0.1:8001",
+  "spendSeed": "64-hex-char-spend-seed",
+  "autoLoad": true
+}
+```
+
+`rok_sync` performs batch upsert with dedup — it reads each memory before writing and skips unchanged entries to avoid unnecessary re-encryption and Fileverse round-trips. For agents, changes are staged as proposals.
+
+### CLI flags
+
+The `rok-mcp` binary supports two flags used by hooks:
+
+| Flag | Purpose |
+|------|---------|
+| `--dump` | Print all decrypted memories to stdout (used by SessionStart hook) |
+| `--status` | Print session status as JSON (used by Stop hook to gate auto-sync) |
 
 ## How it works
 

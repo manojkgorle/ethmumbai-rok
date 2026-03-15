@@ -33,9 +33,10 @@ A key at `/finance` can decrypt anything at `/finance`, `/finance/q1`, `/finance
 
 ```
 ┌─────────────────────────────────────────────────┐
-│                   rok-cli                       │
-│         12 commands, clap-based CLI             │
-├──────────────────┬──────────────────────────────┤
+│           rok-cli          │     rok-mcp        │
+│     12 commands, clap CLI  │  MCP server for    │
+│                            │  Claude Code       │
+├──────────────────┬─────────┴────────────────────┤
 │     rok-sdk      │                              │
 │  Vault, Pipeline,│         rok-pq               │
 │  Policy, Identity│    ML-KEM-768 hybrid         │
@@ -51,6 +52,7 @@ A key at `/finance` can decrypt anything at `/finance`, `/finance/q1`, `/finance
 | **rok-pq** | Post-quantum module: ML-KEM-768 encapsulation, X25519+ML-KEM hybrid combiner, and end-to-end hybrid envelope encrypt/decrypt |
 | **rok-sdk** | High-level abstractions: encrypted vault, data pipeline, access policy engine, selective disclosure credentials |
 | **rok-cli** | Command-line interface with 12 commands for key management, encryption, signing, and delegation |
+| **rok-mcp** | MCP server for Claude Code — encrypted memory backed by Fileverse with auto-sync, scoped access, and key delegation |
 
 ## Cryptographic Primitives
 
@@ -782,6 +784,12 @@ read-only-keys/
     │       ├── policy.rs         # Declarative access policy
     │       ├── identity.rs       # Selective disclosure credentials
     │       └── keyring.rs        # MemoryKeyring implementation
+    ├── rok-mcp/                  # MCP server for Claude Code
+    │   └── src/
+    │       ├── main.rs           # Entry point, --dump/--status CLI flags
+    │       ├── tools.rs          # 9 MCP tools (login, write, sync, etc.)
+    │       ├── session.rs        # Session state, role detection, config
+    │       └── resources.rs      # MCP resource provider
     └── rok-cli/                  # Command-line tool
         └── src/
             ├── main.rs

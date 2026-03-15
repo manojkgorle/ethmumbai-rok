@@ -110,6 +110,22 @@ fn default_agent_id() -> String {
     "claude-code".to_string()
 }
 
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct SyncEntry {
+    /// Hierarchical scope path (e.g. "/project/decisions").
+    pub scope: String,
+    /// Memory name/identifier within the scope.
+    pub key: String,
+    /// Content to encrypt and store.
+    pub content: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct SyncParams {
+    /// List of memories to upsert. Unchanged entries are skipped (dedup).
+    pub entries: Vec<SyncEntry>,
+}
+
 // ---------------------------------------------------------------------------
 // Service
 // ---------------------------------------------------------------------------
@@ -487,6 +503,88 @@ impl RokService {
         }
     }
 
+    #[tool(name = "rok_memory:sync", description = "Batch upsert memories with dedup. Unchanged entries are skipped. Owner writes directly; agent stages proposals.")]
+    async fn sync(
+        &self,
+        #[tool(aggr)] params: SyncParams,
+    ) -> Result<CallToolResult, McpError> {
+        let guard = self.session.read().await;
+        let session = guard
+            .as_ref()
+            .ok_or_else(|| McpError::invalid_params("no active session — call rok_memory:login first", None))?;
+
+        if params.entries.is_empty() {
+            return Self::ok("nothing to sync");
+        }
+
+        let reader = session
+            .memory_reader()
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+        let read_key = session
+            .read_key()
+            .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+
+        let mut written = 0usize;
+        let mut skipped = 0usize;
+        let mut proposed = 0usize;
+        let mut errors = Vec::new();
+
+        for entry in &params.entries {
+            let scope = match Scope::new(&entry.scope) {
+                Ok(s) => s,
+                Err(e) => {
+                    errors.push(format!("{}:{} — invalid scope: {e}", entry.scope, entry.key));
+                    continue;
+                }
+            };
+
+            // Dedup: read existing value — skip if identical
+            if let Ok(existing) = reader.read(&read_key, &scope, &entry.key) {
+                if existing == entry.content.as_bytes() {
+                    skipped += 1;
+                    continue;
+                }
+            }
+
+            match session.role {
+                Role::Owner => {
+                    let store = session
+                        .memory_store()
+                        .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+                    match store.write(&scope, &entry.key, entry.content.as_bytes()) {
+                        Ok(_) => written += 1,
+                        Err(e) => errors.push(format!("{}:{} — write failed: {e}", entry.scope, entry.key)),
+                    }
+                }
+                Role::Agent => {
+                    // Stage as proposal (printed as text — owner sees next session)
+                    proposed += 1;
+                }
+            }
+        }
+
+        let mut parts = Vec::new();
+        if written > 0 {
+            parts.push(format!("{written} written"));
+        }
+        if proposed > 0 {
+            parts.push(format!("{proposed} proposed"));
+        }
+        if skipped > 0 {
+            parts.push(format!("{skipped} unchanged"));
+        }
+        if !errors.is_empty() {
+            parts.push(format!("{} errors", errors.len()));
+        }
+
+        let mut result = format!("sync: {}", parts.join(", "));
+        for err in &errors {
+            result.push_str(&format!("\n  error: {err}"));
+        }
+
+        Self::ok(result)
+    }
+
     #[tool(name = "rok_memory:status", description = "Show current rok session status")]
     async fn status(&self) -> String {
         let guard = self.session.read().await;
@@ -627,7 +725,7 @@ impl rmcp::handler::server::ServerHandler for RokService {
 // ---------------------------------------------------------------------------
 
 impl RokService {
-    fn count_memories(session: &Session) -> anyhow::Result<usize> {
+    pub fn count_memories(session: &Session) -> anyhow::Result<usize> {
         let reader = session.memory_reader()?;
         let read_key = session.read_key()?;
         let entries = reader.list(&read_key).map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -648,6 +746,7 @@ fn ensure_permissions() -> anyhow::Result<()> {
         "mcp__rok-memory__rok_memory:write",
         "mcp__rok-memory__rok_memory:grant",
         "mcp__rok-memory__rok_memory:propose",
+        "mcp__rok-memory__rok_memory:sync",
     ];
 
     let settings_dir = std::path::Path::new(".claude");

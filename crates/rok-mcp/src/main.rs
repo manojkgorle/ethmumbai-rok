@@ -16,6 +16,11 @@ async fn main() -> anyhow::Result<()> {
         return dump_memories();
     }
 
+    // --status: print session status as JSON and exit (used by hooks to check config)
+    if args.iter().any(|a| a == "--status") {
+        return print_status();
+    }
+
     // Log to stderr only — stdout is the JSON-RPC transport
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -33,6 +38,34 @@ async fn main() -> anyhow::Result<()> {
     let server = service.serve(rmcp::transport::io::stdio()).await?;
     server.waiting().await?;
 
+    Ok(())
+}
+
+/// Print session status as JSON. Used by hooks to check if auto-sync should run.
+fn print_status() -> anyhow::Result<()> {
+    let config = SessionConfig::load();
+    let (active, role, auto_load, memory_count) = match config {
+        Some(ref cfg) => {
+            let auto_load = cfg.auto_load.unwrap_or(false);
+            match tools::RokService::build_session_from_config(cfg.clone()) {
+                Some(session) => {
+                    let role = session.role.to_string();
+                    let count = tools::RokService::count_memories(&session).unwrap_or(0);
+                    (true, role, auto_load, count)
+                }
+                None => (false, String::new(), auto_load, 0),
+            }
+        }
+        None => (false, String::new(), false, 0),
+    };
+
+    let status = serde_json::json!({
+        "active": active,
+        "role": role,
+        "auto_load": auto_load,
+        "memory_count": memory_count,
+    });
+    println!("{}", status);
     Ok(())
 }
 

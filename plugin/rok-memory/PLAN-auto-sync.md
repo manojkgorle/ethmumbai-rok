@@ -13,13 +13,13 @@ A Stop hook that prompts Claude to review what it learned and sync meaningful up
 ```
 Session Start                During Work               Conversation End
 ┌──────────────┐     ┌──────────────────────┐     ┌──────────────────┐
-│ SessionStart │     │ Direct writes via     │     │ Stop hook fires  │
-│ hook: --dump │────▶│ rok_memory:write work │────▶│ Prompts Claude:  │
-│ inject context│     │ as before             │     │ "what did you    │
+│SessionStart  │     │ Direct writes via    │     │ Stop hook fires  │
+│hook: --dump  │────▶│ rok_memory:write work│────▶│ Prompts Claude:  │
+│inject context│     │ as before            │     │ "what did you    │
 └──────────────┘     └──────────────────────┘     │  learn? sync it" │
-                                                   │ Claude calls     │
-                                                   │ rok_memory:sync  │
-                                                   └──────────────────┘
+                                                  │ Claude calls     │
+                                                  │ rok_memory:sync  │
+                                                  └──────────────────┘
 ```
 
 ## Implementation steps

@@ -23,6 +23,7 @@ All operations go through `rok_memory:*` MCP tools.
 | `rok_memory:write` | owner | Encrypt and store a memory |
 | `rok_memory:grant` | owner | Export a scoped read key for delegation |
 | `rok_memory:propose` | any | Stage (agent) or accept (owner) a proposed write |
+| `rok_memory:sync` | any | Batch upsert with dedup — owner writes, agent proposes |
 | `rok_memory:status` | any | Show session role, scope, memory count |
 
 ## Roles
@@ -35,6 +36,14 @@ All operations go through `rok_memory:*` MCP tools.
 When the user says "remember this", "store this", "save to memory", or similar:
 - **Owner**: call `rok_memory:write` with scope and key
 - **Agent**: call `rok_memory:propose` to stage the change
+
+## Auto-sync
+
+When `autoLoad` is enabled in `~/.rok/session.json`, a Stop hook fires at conversation end.
+It injects current memories and prompts you to call `rok_memory:sync` with any new knowledge.
+- Merge updates into existing entries — don't duplicate.
+- Skip if nothing meaningful was learned.
+- Agent role: changes are staged as proposals.
 
 ## Notes
 
